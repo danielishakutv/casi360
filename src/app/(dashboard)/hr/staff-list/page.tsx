@@ -16,7 +16,7 @@ import { mockDepartments } from "@/mock/departments";
 import { Employee } from "@/types";
 import { toast } from "sonner";
 
-export default function EmployeesPage() {
+export default function StaffListPage() {
   const [employees, setEmployees] = React.useState<Employee[]>(mockEmployees);
   const [search, setSearch] = React.useState("");
   const [deptFilter, setDeptFilter] = React.useState("all");
@@ -57,8 +57,8 @@ export default function EmployeesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} employees found</p>
+          <h1 className="text-2xl font-bold tracking-tight">Staff List</h1>
+          <p className="text-sm text-muted-foreground">{filtered.length} staff members found</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -66,7 +66,7 @@ export default function EmployeesPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add New Employee</DialogTitle>
+              <DialogTitle>Add New Staff Member</DialogTitle>
               <DialogDescription>Fill in the details to add a new team member.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddEmployee} className="space-y-4">
@@ -135,7 +135,7 @@ export default function EmployeesPage() {
             </TableHeader>
             <TableBody>
               {paginated.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No employees found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No staff members found</TableCell></TableRow>
               ) : (
                 paginated.map((emp) => (
                   <TableRow key={emp.id}>

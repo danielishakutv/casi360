@@ -23,6 +23,9 @@ import {
   ChevronDown,
   LogOut,
   Shield,
+  Wallet,
+  Award,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -48,6 +51,9 @@ const iconMap: Record<string, React.ElementType> = {
   MessageSquare,
   Inbox,
   PenSquare,
+  Wallet,
+  Award,
+  StickyNote,
   Send,
   FileText,
   Settings,

@@ -121,6 +121,41 @@ export interface SidebarItem {
   roles?: UserRole[];
 }
 
+export interface Designation {
+  id: string;
+  title: string;
+  department: string;
+  level: "junior" | "mid" | "senior" | "lead" | "executive";
+  employeeCount: number;
+  description: string;
+  createdAt: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  baseSalary: number;
+  allowances: number;
+  deductions: number;
+  netPay: number;
+  payPeriod: string;
+  status: "paid" | "pending" | "processing";
+  payDate: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  category: "general" | "meeting" | "policy" | "reminder" | "personal";
+  author: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChartData {
   name: string;
   value: number;

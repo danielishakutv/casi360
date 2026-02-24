@@ -2,26 +2,31 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Users, Building2, CalendarOff, CheckCircle, TrendingUp, UserPlus } from "lucide-react";
+import { Users, Building2, CalendarOff, Wallet, Award, StickyNote, Settings, TrendingUp, UserPlus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { mockEmployees } from "@/mock/employees";
 import { mockDepartments } from "@/mock/departments";
 import { mockLeaveRequests } from "@/mock/leaves";
-import { mockApprovals } from "@/mock/approvals";
+import { mockPayroll } from "@/mock/payroll";
+import { mockDesignations } from "@/mock/designations";
+import { mockNotes } from "@/mock/notes";
 
 export default function HRPage() {
   const activeEmployees = mockEmployees.filter((e) => e.status === "active").length;
   const onLeave = mockEmployees.filter((e) => e.status === "on_leave").length;
   const pendingLeaves = mockLeaveRequests.filter((l) => l.status === "pending").length;
-  const pendingApprovals = mockApprovals.filter((a) => a.status === "pending").length;
+  const pendingPayroll = mockPayroll.filter((p) => p.status === "pending").length;
+  const pinnedNotes = mockNotes.filter((n) => n.isPinned).length;
 
   const cards = [
-    { title: "Total Employees", value: mockEmployees.length, subtitle: `${activeEmployees} active`, icon: Users, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400", href: "/hr/employees" },
-    { title: "Departments", value: mockDepartments.length, subtitle: `${mockDepartments.filter(d => d.employeeCount > 0).length} active`, icon: Building2, color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400", href: "/hr/departments" },
+    { title: "Staff List", value: mockEmployees.length, subtitle: `${activeEmployees} active, ${onLeave} on leave`, icon: Users, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400", href: "/hr/staff-list" },
+    { title: "Departments", value: mockDepartments.length, subtitle: `${mockDepartments.filter(d => d.employeeCount > 0).length} active departments`, icon: Building2, color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400", href: "/hr/departments" },
     { title: "Leave Requests", value: pendingLeaves, subtitle: `${onLeave} currently on leave`, icon: CalendarOff, color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400", href: "/hr/leaves" },
-    { title: "Approvals", value: pendingApprovals, subtitle: "Pending review", icon: CheckCircle, color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400", href: "/hr/approvals" },
+    { title: "Payroll", value: `${pendingPayroll} pending`, subtitle: `${mockPayroll.filter(p => p.status === "paid").length} paid this period`, icon: Wallet, color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400", href: "/hr/payroll" },
+    { title: "Designations", value: mockDesignations.length, subtitle: `${mockDesignations.reduce((s, d) => s + d.employeeCount, 0)} positions filled`, icon: Award, color: "text-rose-600 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400", href: "/hr/designations" },
+    { title: "Notes", value: mockNotes.length, subtitle: `${pinnedNotes} pinned`, icon: StickyNote, color: "text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400", href: "/hr/notes" },
   ];
 
   const recentHires = mockEmployees
@@ -36,11 +41,11 @@ export default function HRPage() {
           <p className="text-sm text-muted-foreground">Manage employees, departments, and HR operations</p>
         </div>
         <Button asChild>
-          <Link href="/hr/employees"><UserPlus className="mr-2 h-4 w-4" />Add Employee</Link>
+          <Link href="/hr/staff-list"><UserPlus className="mr-2 h-4 w-4" />Add Staff</Link>
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <Link key={card.title} href={card.href}>
             <Card className="transition-shadow hover:shadow-md cursor-pointer">

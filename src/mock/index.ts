@@ -7,3 +7,6 @@ export { mockLeaveRequests } from "./leaves";
 export { mockApprovals } from "./approvals";
 export { mockActivities } from "./activities";
 export { mockFAQs } from "./faqs";
+export { mockPayroll } from "./payroll";
+export { mockDesignations } from "./designations";
+export { mockNotes } from "./notes";
