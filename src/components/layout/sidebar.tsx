@@ -26,6 +26,9 @@ import {
   Wallet,
   Award,
   StickyNote,
+  Mail,
+  Smartphone,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -58,6 +61,9 @@ const iconMap: Record<string, React.ElementType> = {
   FileText,
   Settings,
   UserCircle,
+  Mail,
+  Smartphone,
+  Megaphone,
   HelpCircle,
   Shield,
 };
