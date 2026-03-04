@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Building2, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,14 @@ import { mockDepartments } from "@/mock/departments";
 import { mockEmployees } from "@/mock/employees";
 
 export default function DepartmentsPage() {
+  const employeesByDept = React.useMemo(() => {
+    const map: Record<string, typeof mockEmployees> = {};
+    for (const emp of mockEmployees) {
+      (map[emp.department] ??= []).push(emp);
+    }
+    return map;
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -16,7 +25,7 @@ export default function DepartmentsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {mockDepartments.map((dept) => {
-          const deptEmployees = mockEmployees.filter((e) => e.department === dept.name);
+          const deptEmployees = employeesByDept[dept.name] ?? [];
           return (
             <Card key={dept.id} className="transition-shadow hover:shadow-md">
               <CardHeader className="pb-3">

@@ -16,17 +16,23 @@ export default function CommunicationPage() {
   const [selectedType, setSelectedType] = React.useState("all");
 
   const allMessages = mockMessages;
-  const emails = allMessages.filter((m) => m.type === "email");
-  const sms = allMessages.filter((m) => m.type === "sms");
-  const sent = allMessages.filter((m) => m.status === "sent");
+  const emails = React.useMemo(() => allMessages.filter((m) => m.type === "email"), [allMessages]);
+  const sms = React.useMemo(() => allMessages.filter((m) => m.type === "sms"), [allMessages]);
+  const sent = React.useMemo(() => allMessages.filter((m) => m.status === "sent"), [allMessages]);
 
   const displayMessages = selectedType === "all" ? allMessages : selectedType === "email" ? emails : sms;
-  const filtered = displayMessages.filter(
-    (m) =>
-      m.to.toLowerCase().includes(search.toLowerCase()) ||
-      (m.subject || "").toLowerCase().includes(search.toLowerCase()) ||
-      m.body.toLowerCase().includes(search.toLowerCase()) ||
-      m.from.toLowerCase().includes(search.toLowerCase())
+  const filtered = React.useMemo(
+    () =>
+      search === ""
+        ? displayMessages
+        : displayMessages.filter(
+            (m) =>
+              m.to.toLowerCase().includes(search.toLowerCase()) ||
+              (m.subject || "").toLowerCase().includes(search.toLowerCase()) ||
+              m.body.toLowerCase().includes(search.toLowerCase()) ||
+              m.from.toLowerCase().includes(search.toLowerCase())
+          ),
+    [displayMessages, search]
   );
 
   const quickActions = [

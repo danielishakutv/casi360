@@ -10,3 +10,8 @@ export { mockFAQs } from "./faqs";
 export { mockPayroll } from "./payroll";
 export { mockDesignations } from "./designations";
 export { mockNotes } from "./notes";
+export { mockVendors } from "./vendors";
+export { mockPurchaseOrders } from "./purchase-orders";
+export { mockInventory } from "./inventory";
+export { mockRequisitions } from "./requisitions";
+export { mockPrograms, mockProjects, mockBeneficiaries, mockProgramReports } from "./programs";

@@ -34,30 +34,80 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/auth-store";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export default function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, updateProfile, changePassword, deleteAccount, logout } = useAuthStore();
+  const router = useRouter();
   const [saving, setSaving] = React.useState(false);
+
+  // Profile form refs
+  const nameRef = React.useRef<HTMLInputElement>(null);
+  const phoneRef = React.useRef<HTMLInputElement>(null);
+
+  // Password form refs
+  const currentPasswordRef = React.useRef<HTMLInputElement>(null);
+  const newPasswordRef = React.useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = React.useRef<HTMLInputElement>(null);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
-    toast.success("Profile updated", {
-      description: "Your profile has been saved successfully.",
+
+    const result = await updateProfile({
+      name: nameRef.current?.value || user?.name,
+      phone: phoneRef.current?.value || undefined,
     });
+
+    setSaving(false);
+    if (result.success) {
+      toast.success("Profile updated", {
+        description: "Your profile has been saved successfully.",
+      });
+    } else {
+      toast.error("Failed to update profile", {
+        description: result.error,
+      });
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    const currentPw = currentPasswordRef.current?.value || "";
+    const newPw = newPasswordRef.current?.value || "";
+    const confirmPw = confirmPasswordRef.current?.value || "";
+
+    if (!currentPw || !newPw || !confirmPw) {
+      toast.error("All password fields are required");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    if (newPw.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const result = await changePassword(currentPw, newPw, confirmPw);
     setSaving(false);
-    toast.success("Password changed", {
-      description: "Your password has been updated successfully.",
-    });
+
+    if (result.success) {
+      toast.success("Password changed", {
+        description: "Your password has been updated successfully.",
+      });
+      // Clear the form
+      if (currentPasswordRef.current) currentPasswordRef.current.value = "";
+      if (newPasswordRef.current) newPasswordRef.current.value = "";
+      if (confirmPasswordRef.current) confirmPasswordRef.current.value = "";
+    } else {
+      toast.error("Failed to change password", {
+        description: result.error,
+      });
+    }
   };
 
   if (!user) return null;
@@ -127,6 +177,7 @@ export default function ProfilePage() {
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="fullName"
+                        ref={nameRef}
                         defaultValue={user.name}
                         className="pl-9"
                       />
@@ -150,6 +201,7 @@ export default function ProfilePage() {
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="phone"
+                        ref={phoneRef}
                         defaultValue={user.phone || ""}
                         className="pl-9"
                       />
@@ -203,6 +255,7 @@ export default function ProfilePage() {
                   <Label htmlFor="currentPassword">Current Password</Label>
                   <Input
                     id="currentPassword"
+                    ref={currentPasswordRef}
                     type="password"
                     placeholder="Enter current password"
                   />
@@ -211,6 +264,7 @@ export default function ProfilePage() {
                   <Label htmlFor="newPassword">New Password</Label>
                   <Input
                     id="newPassword"
+                    ref={newPasswordRef}
                     type="password"
                     placeholder="Enter new password"
                   />
@@ -219,6 +273,7 @@ export default function ProfilePage() {
                   <Label htmlFor="confirmPassword">Confirm New Password</Label>
                   <Input
                     id="confirmPassword"
+                    ref={confirmPasswordRef}
                     type="password"
                     placeholder="Confirm new password"
                   />
@@ -271,12 +326,16 @@ export default function ProfilePage() {
                       <Button variant="outline">Cancel</Button>
                       <Button
                         variant="destructive"
-                        onClick={() =>
-                          toast.error("Account deletion simulated", {
-                            description:
-                              "In production, this would delete your account.",
-                          })
-                        }
+                        onClick={async () => {
+                          const result = await deleteAccount();
+                          if (result.success) {
+                            toast.success("Account deactivated");
+                            await logout();
+                            router.push("/login/");
+                          } else {
+                            toast.error(result.error || "Failed to delete account");
+                          }
+                        }}
                       >
                         Yes, Delete My Account
                       </Button>

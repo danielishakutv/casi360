@@ -29,6 +29,15 @@ import {
   Mail,
   Smartphone,
   Megaphone,
+  ShoppingCart,
+  ClipboardList,
+  Store,
+  Package,
+  FileInput,
+  Target,
+  FolderKanban,
+  Heart,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -66,6 +75,15 @@ const iconMap: Record<string, React.ElementType> = {
   Megaphone,
   HelpCircle,
   Shield,
+  ShoppingCart,
+  ClipboardList,
+  Store,
+  Package,
+  FileInput,
+  Target,
+  FolderKanban,
+  Heart,
+  BarChart3,
 };
 
 export function Sidebar() {
@@ -76,9 +94,10 @@ export function Sidebar() {
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({});
 
   const allModules = getEnabledModules(enabledModules);
-  const modules = user
+  const modules = (user
     ? getModulesForRole(allModules, user.role)
-    : allModules;
+    : allModules
+  ).filter((m) => m.id !== "profile");
 
   const toggleSubMenu = (id: string) => {
     setOpenSubMenus((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -101,7 +120,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen border-r bg-card transition-all duration-300 flex flex-col",
+        "fixed left-0 top-0 z-40 h-screen border-r bg-card transition-[width] duration-300 will-change-[width] flex flex-col",
         isCollapsed ? "w-[68px]" : "w-[260px]"
       )}
     >
@@ -246,7 +265,10 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t p-3">
         {!isCollapsed && user && (
-          <div className="mb-3 flex items-center gap-3 rounded-lg bg-accent/50 p-2">
+          <Link
+            href="/profile"
+            className="mb-3 flex items-center gap-3 rounded-lg bg-accent/50 p-2 transition-colors hover:bg-accent cursor-pointer"
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
               {user.name
                 .split(" ")
@@ -259,7 +281,7 @@ export function Sidebar() {
                 {user.role.replace("_", " ")}
               </p>
             </div>
-          </div>
+          </Link>
         )}
         <div className="flex items-center gap-2">
           {isCollapsed ? (

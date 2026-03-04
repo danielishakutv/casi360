@@ -10,6 +10,29 @@ export interface User {
   phone?: string;
   status: "active" | "inactive";
   createdAt: string;
+  forcePasswordChange?: boolean;
+  lastLoginAt?: string;
+  emailVerifiedAt?: string;
+}
+
+/**
+ * Maps snake_case API user response to camelCase frontend User type.
+ */
+export function mapApiUser(apiUser: Record<string, unknown>): User {
+  return {
+    id: apiUser.id as string,
+    name: apiUser.name as string,
+    email: apiUser.email as string,
+    role: apiUser.role as UserRole,
+    avatar: (apiUser.avatar as string) || undefined,
+    department: (apiUser.department as string) || undefined,
+    phone: (apiUser.phone as string) || undefined,
+    status: apiUser.status as "active" | "inactive",
+    createdAt: (apiUser.created_at as string) || "",
+    forcePasswordChange: !!apiUser.force_password_change,
+    lastLoginAt: (apiUser.last_login_at as string) || undefined,
+    emailVerifiedAt: (apiUser.email_verified_at as string) || undefined,
+  };
 }
 
 export interface Employee {
@@ -160,4 +183,133 @@ export interface ChartData {
   name: string;
   value: number;
   fill?: string;
+}
+
+// Procurement types
+export interface Vendor {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  category: "goods" | "services" | "works" | "consulting";
+  status: "active" | "inactive" | "blacklisted";
+  rating: number;
+  totalOrders: number;
+  createdAt: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  title: string;
+  vendorId: string;
+  vendorName: string;
+  items: PurchaseOrderItem[];
+  totalAmount: number;
+  status: "draft" | "pending" | "approved" | "ordered" | "delivered" | "cancelled";
+  priority: "low" | "medium" | "high" | "urgent";
+  requestedBy: string;
+  approvedBy?: string;
+  createdAt: string;
+  expectedDelivery: string;
+}
+
+export interface PurchaseOrderItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  reorderLevel: number;
+  unitCost: number;
+  location: string;
+  lastRestocked: string;
+  status: "in_stock" | "low_stock" | "out_of_stock";
+}
+
+export interface Requisition {
+  id: string;
+  title: string;
+  department: string;
+  requestedBy: string;
+  items: { name: string; quantity: number; estimatedCost: number }[];
+  totalEstimate: number;
+  status: "draft" | "submitted" | "approved" | "rejected" | "fulfilled";
+  priority: "low" | "medium" | "high" | "urgent";
+  justification: string;
+  createdAt: string;
+}
+
+// Programs types
+export interface Program {
+  id: string;
+  name: string;
+  description: string;
+  category: "education" | "health" | "livelihood" | "advocacy" | "emergency" | "capacity_building";
+  status: "planning" | "active" | "completed" | "suspended" | "closed";
+  startDate: string;
+  endDate: string;
+  budget: number;
+  spent: number;
+  manager: string;
+  beneficiaryCount: number;
+  location: string;
+  progress: number;
+}
+
+export interface Project {
+  id: string;
+  programId: string;
+  programName: string;
+  name: string;
+  description: string;
+  status: "not_started" | "in_progress" | "completed" | "on_hold" | "cancelled";
+  startDate: string;
+  endDate: string;
+  budget: number;
+  spent: number;
+  manager: string;
+  team: string[];
+  milestones: Milestone[];
+  progress: number;
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  dueDate: string;
+  completed: boolean;
+}
+
+export interface Beneficiary {
+  id: string;
+  name: string;
+  age: number;
+  gender: "male" | "female" | "other";
+  location: string;
+  programIds: string[];
+  programNames: string[];
+  registrationDate: string;
+  status: "active" | "inactive" | "graduated";
+  contact: string;
+}
+
+export interface ProgramReport {
+  id: string;
+  programId: string;
+  programName: string;
+  title: string;
+  type: "monthly" | "quarterly" | "annual" | "impact" | "financial";
+  period: string;
+  author: string;
+  status: "draft" | "submitted" | "approved";
+  createdAt: string;
+  summary: string;
 }

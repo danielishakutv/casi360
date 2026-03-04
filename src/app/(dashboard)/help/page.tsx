@@ -81,20 +81,28 @@ export default function HelpPage() {
   );
 
   // Count FAQs per category
-  const categoriesWithCounts = categories.map((cat) => ({
-    ...cat,
-    count: mockFAQs.filter((f) => f.category === cat.name).length,
-  }));
+  const categoriesWithCounts = React.useMemo(
+    () =>
+      categories.map((cat) => ({
+        ...cat,
+        count: mockFAQs.filter((f) => f.category === cat.name).length,
+      })),
+    []
+  );
 
-  const filteredFAQs = mockFAQs.filter((faq) => {
-    const matchSearch =
-      search === "" ||
-      faq.question.toLowerCase().includes(search.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(search.toLowerCase());
-    const matchCategory =
-      !selectedCategory || faq.category === selectedCategory;
-    return matchSearch && matchCategory;
-  });
+  const filteredFAQs = React.useMemo(
+    () =>
+      mockFAQs.filter((faq) => {
+        const matchSearch =
+          search === "" ||
+          faq.question.toLowerCase().includes(search.toLowerCase()) ||
+          faq.answer.toLowerCase().includes(search.toLowerCase());
+        const matchCategory =
+          !selectedCategory || faq.category === selectedCategory;
+        return matchSearch && matchCategory;
+      }),
+    [search, selectedCategory]
+  );
 
   return (
     <div className="space-y-6">

@@ -11,6 +11,9 @@ import {
   Search,
   Check,
   X,
+  UserCircle,
+  Settings,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,13 +31,14 @@ import { useNotificationStore } from "@/store/notification-store";
 import { useSidebarStore } from "@/store/sidebar-store";
 import { useAuthStore } from "@/store/auth-store";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotificationStore();
   const { toggleMobile } = useSidebarStore();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -197,16 +201,47 @@ export function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User Avatar */}
+        {/* User Avatar with Dropdown */}
         {user && (
-          <div className="hidden sm:flex items-center gap-2 ml-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-              {user.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="hidden sm:flex items-center gap-2 ml-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground cursor-pointer transition-opacity hover:opacity-80">
+                  {user.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-3 py-2">
+                <p className="text-sm font-medium">{user.name}</p>
+                <p className="text-xs text-muted-foreground">{user.email}</p>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile" className="cursor-pointer">
+                  <UserCircle className="mr-2 h-4 w-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings" className="cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive cursor-pointer"
+                onClick={() => logout()}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </header>

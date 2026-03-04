@@ -11,20 +11,35 @@ import { cn } from "@/lib/utils";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { isCollapsed, isMobileOpen, setMobileOpen } = useSidebarStore();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoading, checkSession } = useAuthStore();
   const pathname = usePathname();
   const router = useRouter();
+  const sessionChecked = React.useRef(false);
 
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Check session once on mount — fire-and-forget so it never blocks rendering.
+  // The persisted zustand state keeps the user logged in while the check runs
+  // in the background; if the server says "not authenticated" zustand will update
+  // and the redirect effect below will kick in.
   React.useEffect(() => {
-    if (!isAuthenticated && pathname !== "/login") {
-      router.push("/login");
+    if (!sessionChecked.current) {
+      sessionChecked.current = true;
+      // intentionally not awaited — runs in background
+      checkSession();
     }
-  }, [isAuthenticated, pathname, router]);
+  }, [checkSession]);
 
+  React.useEffect(() => {
+    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+      router.push("/login/");
+    }
+  }, [isAuthenticated, isLoading, pathname, router]);
+
+  // Trust the persisted auth state — don't blank the screen while checkSession
+  // is in-flight; only redirect if we're definitely unauthenticated.
   if (!isAuthenticated) {
     return null;
   }
@@ -46,7 +61,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <div
         className={cn(
-          "transition-all duration-300",
+          "transition-[padding-left] duration-300 will-change-[padding-left]",
           isCollapsed ? "lg:pl-[68px]" : "lg:pl-[260px]"
         )}
       >

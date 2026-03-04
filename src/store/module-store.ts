@@ -10,6 +10,8 @@ interface ModuleState {
 const defaultModules: Record<string, boolean> = {
   dashboard: true,
   hr: true,
+  procurement: true,
+  programs: true,
   communication: true,
   settings: true,
   profile: true,

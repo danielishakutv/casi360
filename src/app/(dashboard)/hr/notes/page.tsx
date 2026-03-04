@@ -23,6 +23,58 @@ const categoryColors: Record<string, string> = {
   personal: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
 };
 
+const NoteCard = React.memo(function NoteCard({
+  note,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: {
+  note: Note;
+  onTogglePin: (id: string) => void;
+  onEdit: (note: Note) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <Card className="group transition-shadow hover:shadow-md">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-sm font-semibold line-clamp-1">{note.title}</CardTitle>
+            <CardDescription className="mt-1 flex items-center gap-2 text-xs">
+              <span>{note.author}</span>
+              <span>&middot;</span>
+              <Clock className="h-3 w-3" />
+              <span>{formatDistanceToNow(new Date(note.updatedAt), { addSuffix: true })}</span>
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onTogglePin(note.id)}>
+              {note.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(note)}>
+              <Edit className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(note.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pb-4">
+        <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
+        <div className="mt-3 flex items-center gap-2">
+          <Badge className={`text-xs ${categoryColors[note.category]}`} variant="secondary">{note.category}</Badge>
+          {note.isPinned && (
+            <Badge variant="outline" className="text-xs">
+              <Pin className="mr-1 h-3 w-3" />Pinned
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 export default function NotesPage() {
   const [notes, setNotes] = React.useState<Note[]>(mockNotes);
   const [search, setSearch] = React.useState("");
@@ -73,45 +125,9 @@ export default function NotesPage() {
     toast.success("Note created", { description: newNote.title });
   };
 
-  const NoteCard = ({ note }: { note: Note }) => (
-    <Card className="group transition-shadow hover:shadow-md">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-sm font-semibold line-clamp-1">{note.title}</CardTitle>
-            <CardDescription className="mt-1 flex items-center gap-2 text-xs">
-              <span>{note.author}</span>
-              <span>·</span>
-              <Clock className="h-3 w-3" />
-              <span>{formatDistanceToNow(new Date(note.updatedAt), { addSuffix: true })}</span>
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => togglePin(note.id)}>
-              {note.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toast.info("Edit note", { description: note.title })}>
-              <Edit className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteNote(note.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="pb-4">
-        <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
-        <div className="mt-3 flex items-center gap-2">
-          <Badge className={`text-xs ${categoryColors[note.category]}`} variant="secondary">{note.category}</Badge>
-          {note.isPinned && (
-            <Badge variant="outline" className="text-xs">
-              <Pin className="mr-1 h-3 w-3" />Pinned
-            </Badge>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+  const handleEdit = React.useCallback((note: Note) => {
+    toast.info("Edit note", { description: note.title });
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -192,7 +208,7 @@ export default function NotesPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-semibold flex items-center gap-2"><Pin className="h-4 w-4" />Pinned</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pinnedNotes.map((note) => (<NoteCard key={note.id} note={note} />))}
+            {pinnedNotes.map((note) => (<NoteCard key={note.id} note={note} onTogglePin={togglePin} onEdit={handleEdit} onDelete={deleteNote} />))}
           </div>
         </div>
       )}
@@ -210,7 +226,7 @@ export default function NotesPage() {
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {unpinnedNotes.map((note) => (<NoteCard key={note.id} note={note} />))}
+            {unpinnedNotes.map((note) => (<NoteCard key={note.id} note={note} onTogglePin={togglePin} onEdit={handleEdit} onDelete={deleteNote} />))}
           </div>
         )}
       </div>

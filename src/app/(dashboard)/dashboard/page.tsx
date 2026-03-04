@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   Users,
   MessageSquare,
@@ -8,7 +9,6 @@ import {
   FileText,
   Clock,
   Calendar as CalendarIcon,
-  TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
   Activity,
@@ -21,8 +21,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Calendar } from "@/components/ui/calendar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { mockActivities } from "@/mock/activities";
 import { mockEmployees } from "@/mock/employees";
 import { mockMessages } from "@/mock/messages";
@@ -30,48 +30,30 @@ import { mockApprovals } from "@/mock/approvals";
 import { mockLeaveRequests } from "@/mock/leaves";
 import { useAuthStore } from "@/store/auth-store";
 import { formatDistanceToNow, format } from "date-fns";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Area,
-  AreaChart,
-} from "recharts";
 
-const barChartData = [
-  { name: "Jan", employees: 18, requests: 5 },
-  { name: "Feb", employees: 20, requests: 8 },
-  { name: "Mar", employees: 22, requests: 3 },
-  { name: "Apr", employees: 23, requests: 6 },
-  { name: "May", employees: 24, requests: 4 },
-  { name: "Jun", employees: 25, requests: 7 },
-];
+// Lazy-load chart components — recharts is ~500 KB and only needed on this page
+const DashboardCharts = dynamic(
+  () => import("./dashboard-charts"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+        <Card><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+      </div>
+    ),
+  }
+);
 
-const pieChartData = [
-  { name: "Administration", value: 3, color: "#6366F1" },
-  { name: "Programs", value: 6, color: "#8B5CF6" },
-  { name: "Finance", value: 4, color: "#EC4899" },
-  { name: "IT", value: 4, color: "#14B8A6" },
-  { name: "HR", value: 3, color: "#F97316" },
-  { name: "Operations", value: 3, color: "#06B6D4" },
-  { name: "Communications", value: 2, color: "#EAB308" },
-];
-
-const areaChartData = [
-  { name: "Week 1", messages: 12, approvals: 3 },
-  { name: "Week 2", messages: 19, approvals: 5 },
-  { name: "Week 3", messages: 15, approvals: 2 },
-  { name: "Week 4", messages: 22, approvals: 6 },
-];
+const DashboardAreaChart = dynamic(
+  () => import("./dashboard-area-chart"),
+  {
+    ssr: false,
+    loading: () => (
+      <Card><CardContent className="p-6"><Skeleton className="h-[250px] w-full" /></CardContent></Card>
+    ),
+  }
+);
 
 function LiveClock() {
   const [time, setTime] = React.useState(new Date());
@@ -99,12 +81,13 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const [date, setDate] = React.useState<Date | undefined>(new Date());
 
-  const summaryCards = [
+  const summaryCards = React.useMemo(
+    () => [
     {
       title: "Total Employees",
       value: mockEmployees.length,
       change: "+2",
-      trend: "up",
+      trend: "up" as const,
       icon: Users,
       color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400",
     },
@@ -112,7 +95,7 @@ export default function DashboardPage() {
       title: "Messages",
       value: mockMessages.filter((m) => m.status === "sent").length,
       change: "+5",
-      trend: "up",
+      trend: "up" as const,
       icon: MessageSquare,
       color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400",
     },
@@ -120,7 +103,7 @@ export default function DashboardPage() {
       title: "Pending Approvals",
       value: mockApprovals.filter((a) => a.status === "pending").length,
       change: "-1",
-      trend: "down",
+      trend: "down" as const,
       icon: CheckCircle,
       color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400",
     },
@@ -128,13 +111,13 @@ export default function DashboardPage() {
       title: "Leave Requests",
       value: mockLeaveRequests.filter((l) => l.status === "pending").length,
       change: "+3",
-      trend: "up",
+      trend: "up" as const,
       icon: FileText,
       color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400",
     },
-  ];
+  ], []);
 
-  const getActivityIcon = (type: string) => {
+  const getActivityIcon = React.useCallback((type: string) => {
     switch (type) {
       case "create":
         return "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400";
@@ -149,7 +132,7 @@ export default function DashboardPage() {
       default:
         return "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400";
     }
-  };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -204,86 +187,8 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Bar Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Employee Growth</CardTitle>
-            <CardDescription>Monthly employee count vs. requests</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barChartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" tick={{ fontSize: 12 }} />
-                  <YAxis className="text-xs" tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Bar dataKey="employees" fill="#6366F1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="requests" fill="#A5B4FC" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Pie Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Department Distribution</CardTitle>
-            <CardDescription>Employees across departments</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px] flex items-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex flex-col gap-2 min-w-[140px]">
-                {pieChartData.map((item) => (
-                  <div key={item.name} className="flex items-center gap-2 text-xs">
-                    <div
-                      className="h-3 w-3 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-muted-foreground truncate">{item.name}</span>
-                    <span className="ml-auto font-medium">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Charts Row — lazy-loaded to keep initial bundle small */}
+      <DashboardCharts />
 
       {/* Activity Feed + Calendar */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -352,48 +257,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Area Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Weekly Activity Trend</CardTitle>
-          <CardDescription>Messages and approvals by week</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={areaChartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="messages"
-                  stackId="1"
-                  stroke="#6366F1"
-                  fill="#6366F1"
-                  fillOpacity={0.2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="approvals"
-                  stackId="1"
-                  stroke="#14B8A6"
-                  fill="#14B8A6"
-                  fillOpacity={0.2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Area Chart — lazy-loaded */}
+      <DashboardAreaChart />
     </div>
   );
 }

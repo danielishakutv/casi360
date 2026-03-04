@@ -20,18 +20,21 @@ export default function HRPage() {
   const pendingPayroll = mockPayroll.filter((p) => p.status === "pending").length;
   const pinnedNotes = mockNotes.filter((n) => n.isPinned).length;
 
-  const cards = [
+  const cards = React.useMemo(() => [
     { title: "Staff List", value: mockEmployees.length, subtitle: `${activeEmployees} active, ${onLeave} on leave`, icon: Users, color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400", href: "/hr/staff-list" },
     { title: "Departments", value: mockDepartments.length, subtitle: `${mockDepartments.filter(d => d.employeeCount > 0).length} active departments`, icon: Building2, color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400", href: "/hr/departments" },
     { title: "Leave Requests", value: pendingLeaves, subtitle: `${onLeave} currently on leave`, icon: CalendarOff, color: "text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400", href: "/hr/leaves" },
     { title: "Payroll", value: `${pendingPayroll} pending`, subtitle: `${mockPayroll.filter(p => p.status === "paid").length} paid this period`, icon: Wallet, color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400", href: "/hr/payroll" },
     { title: "Designations", value: mockDesignations.length, subtitle: `${mockDesignations.reduce((s, d) => s + d.employeeCount, 0)} positions filled`, icon: Award, color: "text-rose-600 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400", href: "/hr/designations" },
     { title: "Notes", value: mockNotes.length, subtitle: `${pinnedNotes} pinned`, icon: StickyNote, color: "text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400", href: "/hr/notes" },
-  ];
+  ], [activeEmployees, onLeave, pendingLeaves, pendingPayroll, pinnedNotes]);
 
-  const recentHires = mockEmployees
-    .sort((a, b) => new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime())
-    .slice(0, 5);
+  const recentHires = React.useMemo(
+    () => [...mockEmployees]
+      .sort((a, b) => new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime())
+      .slice(0, 5),
+    []
+  );
 
   return (
     <div className="space-y-6">

@@ -32,27 +32,27 @@ export default function LoginPage() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "daniel@casi.org",
-      password: "demo123",
+      email: "",
+      password: "",
     },
   });
 
   React.useEffect(() => {
     if (isAuthenticated) {
-      router.push("/dashboard");
+      router.push("/dashboard/");
     }
   }, [isAuthenticated, router]);
 
   const onSubmit = async (data: LoginForm) => {
-    const success = await login(data.email, data.password);
-    if (success) {
+    const result = await login(data.email, data.password);
+    if (result.success) {
       toast.success("Login successful", {
         description: "Welcome to CASI360",
       });
-      router.push("/dashboard");
+      router.push("/dashboard/");
     } else {
       toast.error("Login failed", {
-        description: "Invalid email or password. Try daniel@casi.org / demo123",
+        description: result.error || "Invalid email or password.",
       });
     }
   };
@@ -136,38 +136,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        {/* Demo Credentials */}
-        <Card className="border-dashed">
-          <CardContent className="pt-4 pb-4">
-            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Demo Credentials
-            </p>
-            <div className="space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Email:</span>{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                  daniel@casi.org
-                </code>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Password:</span>{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
-                  demo123
-                </code>
-              </p>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {["super_admin", "admin", "manager", "staff"].map((role) => (
-                <span
-                  key={role}
-                  className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs capitalize text-muted-foreground"
-                >
-                  {role.replace("_", " ")}
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+
 
         <p className="text-center text-xs text-muted-foreground">
           &copy; {new Date().getFullYear()} Care Aid Support Initiative. All rights reserved.

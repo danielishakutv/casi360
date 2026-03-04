@@ -1,0 +1,3 @@
+# CASI360 Backend - Storage
+
+This directory is used by the Laravel framework for caching, sessions, and logs.

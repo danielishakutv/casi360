@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# archives / binaries
+*.zip
+*.tar.gz
+*.rar
+
+# server config (environment-specific)
+.htaccess
