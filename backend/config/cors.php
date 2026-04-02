@@ -35,7 +35,7 @@ return [
 
     'exposed_headers' => [],
 
-    'max_age' => 0,
+    'max_age' => 7200,
 
     // IMPORTANT: Must be true for Sanctum cookie-based auth
     'supports_credentials' => true,

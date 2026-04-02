@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ProfileController extends Controller
 {
@@ -48,20 +49,22 @@ class ProfileController extends Controller
         $user = $request->user();
         $oldValues = $user->only(['name', 'phone', 'department']);
 
-        $user->update($request->only(['name', 'phone', 'department']));
+        return DB::transaction(function () use ($request, $user, $oldValues) {
+            $user->update($request->only(['name', 'phone', 'department']));
 
-        AuditLog::record(
-            $user->id,
-            'profile_updated',
-            'user',
-            $user->id,
-            $oldValues,
-            $user->only(['name', 'phone', 'department'])
-        );
+            AuditLog::record(
+                $user->id,
+                'profile_updated',
+                'user',
+                $user->id,
+                $oldValues,
+                $user->only(['name', 'phone', 'department'])
+            );
 
-        return $this->success([
-            'user' => $user->fresh()->toAuthArray(),
-        ], 'Profile updated successfully');
+            return $this->success([
+                'user' => $user->fresh()->toAuthArray(),
+            ], 'Profile updated successfully');
+        });
     }
 
     /**
@@ -78,22 +81,24 @@ class ProfileController extends Controller
             return $this->error('Super admin accounts cannot be self-deleted.', 403);
         }
 
-        $user->update(['status' => 'inactive']);
+        return DB::transaction(function () use ($request, $user) {
+            $user->update(['status' => 'inactive']);
 
-        AuditLog::record(
-            $user->id,
-            'account_deactivated',
-            'user',
-            $user->id
-        );
+            AuditLog::record(
+                $user->id,
+                'account_deactivated',
+                'user',
+                $user->id
+            );
 
-        Auth::guard('web')->logout();
+            Auth::guard('web')->logout();
 
-        if ($request->hasSession()) {
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-        }
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
 
-        return $this->success(null, 'Account deactivated successfully');
+            return $this->success(null, 'Account deactivated successfully');
+        });
     }
 }

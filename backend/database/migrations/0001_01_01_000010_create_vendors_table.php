@@ -1,0 +1,38 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('vendors', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->string('contact_person')->nullable();
+            $table->string('email')->nullable();
+            $table->string('phone', 30)->nullable();
+            $table->text('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('state')->nullable();
+            $table->string('country')->nullable();
+            $table->string('tax_id', 50)->nullable();
+            $table->string('bank_name')->nullable();
+            $table->string('bank_account_number', 50)->nullable();
+            $table->text('notes')->nullable();
+            $table->enum('status', ['active', 'inactive'])->default('active');
+            $table->timestamps();
+
+            $table->index('name');
+            $table->index('status');
+            $table->index('email');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('vendors');
+    }
+};

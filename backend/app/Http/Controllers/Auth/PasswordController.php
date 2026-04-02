@@ -9,6 +9,7 @@ use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Models\AuditLog;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -34,20 +35,22 @@ class PasswordController extends Controller
             return $this->error('New password must be different from current password.', 422);
         }
 
-        $user->update([
-            'password' => Hash::make($request->new_password),
-            'password_changed_at' => now(),
-            'force_password_change' => false,
-        ]);
+        return DB::transaction(function () use ($request, $user) {
+            $user->update([
+                'password' => Hash::make($request->new_password),
+                'password_changed_at' => now(),
+                'force_password_change' => false,
+            ]);
 
-        AuditLog::record(
-            $user->id,
-            'password_changed',
-            'user',
-            $user->id
-        );
+            AuditLog::record(
+                $user->id,
+                'password_changed',
+                'user',
+                $user->id
+            );
 
-        return $this->success(null, 'Password changed successfully');
+            return $this->success(null, 'Password changed successfully');
+        });
     }
 
     /**

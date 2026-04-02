@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class UserManagementController extends Controller
@@ -33,15 +34,16 @@ class UserManagementController extends Controller
             $query->where('department', $request->department);
         }
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = str_replace(['%', '_'], ['\%', '\_'], $request->search);
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
+        $perPage = min((int) $request->input('per_page', 25), 100);
         $users = $query->orderBy('created_at', 'desc')
-            ->paginate($request->input('per_page', 25));
+            ->paginate($perPage);
 
         return $this->success([
             'users' => collect($users->items())->map->toAuthArray(),
@@ -74,21 +76,23 @@ class UserManagementController extends Controller
         $user = User::findOrFail($id);
         $oldValues = $user->only(['name', 'email', 'phone', 'department', 'status']);
 
-        $updateData = $request->only(['name', 'email', 'phone', 'department', 'status']);
-        $user->update(array_filter($updateData));
+        return DB::transaction(function () use ($request, $user, $oldValues) {
+            $updateData = $request->only(['name', 'email', 'phone', 'department', 'status']);
+            $user->update(array_filter($updateData));
 
-        AuditLog::record(
-            auth()->id(),
-            'user_updated',
-            'user',
-            $user->id,
-            $oldValues,
-            $user->fresh()->only(['name', 'email', 'phone', 'department', 'status'])
-        );
+            AuditLog::record(
+                auth()->id(),
+                'user_updated',
+                'user',
+                $user->id,
+                $oldValues,
+                $user->fresh()->only(['name', 'email', 'phone', 'department', 'status'])
+            );
 
-        return $this->success([
-            'user' => $user->fresh()->toAuthArray(),
-        ], 'User updated successfully');
+            return $this->success([
+                'user' => $user->fresh()->toAuthArray(),
+            ], 'User updated successfully');
+        });
     }
 
     /**
@@ -108,18 +112,20 @@ class UserManagementController extends Controller
             return $this->error('You cannot delete your own account from here.', 403);
         }
 
-        $user->update(['status' => 'inactive']);
+        return DB::transaction(function () use ($user) {
+            $user->update(['status' => 'inactive']);
 
-        AuditLog::record(
-            auth()->id(),
-            'user_deactivated',
-            'user',
-            $user->id,
-            ['status' => 'active'],
-            ['status' => 'inactive']
-        );
+            AuditLog::record(
+                auth()->id(),
+                'user_deactivated',
+                'user',
+                $user->id,
+                ['status' => 'active'],
+                ['status' => 'inactive']
+            );
 
-        return $this->success(null, 'User deactivated successfully');
+            return $this->success(null, 'User deactivated successfully');
+        });
     }
 
     /**
@@ -140,20 +146,22 @@ class UserManagementController extends Controller
             return $this->error('You cannot change your own role.', 403);
         }
 
-        $user->update(['role' => $request->role]);
+        return DB::transaction(function () use ($request, $user, $oldRole) {
+            $user->update(['role' => $request->role]);
 
-        AuditLog::record(
-            auth()->id(),
-            'role_changed',
-            'user',
-            $user->id,
-            ['role' => $oldRole],
-            ['role' => $request->role]
-        );
+            AuditLog::record(
+                auth()->id(),
+                'role_changed',
+                'user',
+                $user->id,
+                ['role' => $oldRole],
+                ['role' => $request->role]
+            );
 
-        return $this->success([
-            'user' => $user->fresh()->toAuthArray(),
-        ], "User role updated from {$oldRole} to {$request->role}");
+            return $this->success([
+                'user' => $user->fresh()->toAuthArray(),
+            ], "User role updated from {$oldRole} to {$request->role}");
+        });
     }
 
     /**
@@ -172,19 +180,21 @@ class UserManagementController extends Controller
             return $this->error('You cannot change your own status.', 403);
         }
 
-        $user->update(['status' => $request->status]);
+        return DB::transaction(function () use ($request, $user, $oldStatus) {
+            $user->update(['status' => $request->status]);
 
-        AuditLog::record(
-            auth()->id(),
-            'user_status_changed',
-            'user',
-            $user->id,
-            ['status' => $oldStatus],
-            ['status' => $request->status]
-        );
+            AuditLog::record(
+                auth()->id(),
+                'user_status_changed',
+                'user',
+                $user->id,
+                ['status' => $oldStatus],
+                ['status' => $request->status]
+            );
 
-        return $this->success([
-            'user' => $user->fresh()->toAuthArray(),
-        ], "User status changed to {$request->status}");
+            return $this->success([
+                'user' => $user->fresh()->toAuthArray(),
+            ], "User status changed to {$request->status}");
+        });
     }
 }
