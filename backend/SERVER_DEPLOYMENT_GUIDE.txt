@@ -1,0 +1,231 @@
+=========================================================
+  CASI360 Backend Deployment Guide
+  Server: root@vmi2446060:/home/api.casi360.com
+  Date: April 2, 2026
+=========================================================
+
+IMPORTANT RULES:
+- NEVER delete any file or directory
+- If something needs replacing, rename the old one first
+- .env, storage/, vendor/ on server must NOT be touched
+- public/ content goes to public_html/ on server
+
+=========================================================
+STEP 1: Initialize Git on the Server & Fix Permissions
+=========================================================
+
+cd /home/api.casi360.com
+git init
+git config --global --add safe.directory /home/api.casi360.com
+git remote add origin https://github.com/danielishakutv/casi360.git
+git fetch origin main
+
+
+=========================================================
+STEP 2: Extract Backend Files to a Temp Directory
+=========================================================
+
+# Create a temporary working directory
+mkdir -p /home/api.casi360.com/_deploy_tmp
+
+# Checkout only the backend folder from the repo
+cd /home/api.casi360.com
+git --work-tree=/home/api.casi360.com/_deploy_tmp checkout origin/main -- backend/
+
+# Verify files were downloaded before continuing:
+ls /home/api.casi360.com/_deploy_tmp/backend/
+# You should see: app/ bootstrap/ config/ database/ routes/ etc.
+# If you do NOT see these, STOP and check the git fetch output above.
+
+# Files will be at: /home/api.casi360.com/_deploy_tmp/backend/
+
+
+=========================================================
+STEP 3: Copy Backend Files (excluding public/, .env, vendor/, storage/)
+=========================================================
+
+# Copy app/ directory
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/app/* /home/api.casi360.com/app/
+
+# Copy bootstrap/ directory
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/bootstrap/* /home/api.casi360.com/bootstrap/
+
+# Copy config/ directory
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/config/* /home/api.casi360.com/config/
+
+# Copy database/ directory
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/database/* /home/api.casi360.com/database/
+
+# Copy routes/ directory
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/routes/* /home/api.casi360.com/routes/
+
+# Copy resources/ directory (if exists on server)
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/resources/* /home/api.casi360.com/resources/
+
+# Copy tests/ directory (if exists on server)
+mkdir -p /home/api.casi360.com/tests
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/tests/* /home/api.casi360.com/tests/
+
+# Copy individual root files
+cp -f /home/api.casi360.com/_deploy_tmp/backend/artisan /home/api.casi360.com/artisan
+cp -f /home/api.casi360.com/_deploy_tmp/backend/composer.json /home/api.casi360.com/composer.json
+cp -f /home/api.casi360.com/_deploy_tmp/backend/phpunit.xml /home/api.casi360.com/phpunit.xml
+
+# DO NOT copy: .env, vendor/, storage/, public/
+
+
+=========================================================
+STEP 4: Copy public/ Content to public_html/
+=========================================================
+
+# Backup existing public_html index.php first (rename, don't delete)
+mv /home/api.casi360.com/public_html/index.php /home/api.casi360.com/public_html/index.php.bak_$(date +%Y%m%d)
+
+# Copy new public files
+cp -f /home/api.casi360.com/_deploy_tmp/backend/public/index.php /home/api.casi360.com/public_html/index.php
+cp -f /home/api.casi360.com/_deploy_tmp/backend/public/.htaccess /home/api.casi360.com/public_html/.htaccess
+
+
+=========================================================
+STEP 5: Fix public_html/index.php Path (if needed)
+=========================================================
+
+# The default Laravel index.php expects the app one level up.
+# Check that the path in index.php points correctly:
+
+cat /home/api.casi360.com/public_html/index.php
+
+# It should have these paths (relative to public_html):
+#   require __DIR__.'/../vendor/autoload.php';
+#   $app = require_once __DIR__.'/../bootstrap/app.php';
+#
+# If public_html is at the same level as app/, vendor/, etc.
+# then ../ is correct. If not, adjust accordingly.
+
+
+=========================================================
+STEP 6: Install/Update Composer Dependencies
+=========================================================
+
+cd /home/api.casi360.com
+composer install --no-dev --optimize-autoloader
+
+
+=========================================================
+STEP 7: Clear All Caches and Optimize
+=========================================================
+
+cd /home/api.casi360.com
+php artisan optimize:clear
+php artisan optimize
+
+
+=========================================================
+STEP 8: Run Any New Migrations
+=========================================================
+
+# Check migration status first
+php artisan migrate:status
+
+# If there are pending migrations:
+php artisan migrate
+
+# Re-seed permissions (safe to re-run)
+php artisan db:seed --class=PermissionSeeder
+
+
+=========================================================
+STEP 9: Verify Everything Works
+=========================================================
+
+# Test controllers load without errors
+php artisan tinker --execute="
+try {
+    new \App\Http\Controllers\Procurement\VendorController();
+    echo 'VendorController OK | ';
+    new \App\Http\Controllers\Procurement\PurchaseOrderController();
+    echo 'PurchaseOrderController OK | ';
+    new \App\Http\Controllers\Procurement\RequisitionController();
+    echo 'RequisitionController OK';
+} catch (\Throwable \$e) {
+    echo 'ERROR: ' . \$e->getMessage();
+}
+"
+
+# Test an endpoint
+curl -s -o /dev/null -w "%{http_code}" https://api.casi360.com/api/v1/procurement/vendors -H "Authorization: Bearer YOUR_TOKEN"
+
+
+=========================================================
+STEP 10: Cleanup (Rename, Don't Delete)
+=========================================================
+
+# Rename the temp deploy directory (don't delete it)
+mv /home/api.casi360.com/_deploy_tmp /home/api.casi360.com/_deploy_tmp_done_$(date +%Y%m%d)
+
+# Rename the .git directory if you don't want git on the server
+mv /home/api.casi360.com/.git /home/api.casi360.com/.git_bak_$(date +%Y%m%d)
+
+
+=========================================================
+TROUBLESHOOTING
+=========================================================
+
+If you get 500 errors after deployment:
+
+1. Check Laravel log:
+   tail -50 /home/api.casi360.com/storage/logs/laravel.log
+
+2. Clear all caches again:
+   php artisan optimize:clear
+
+3. Check file permissions:
+   chown -R www-data:www-data /home/api.casi360.com/storage
+   chown -R www-data:www-data /home/api.casi360.com/bootstrap/cache
+   chmod -R 775 /home/api.casi360.com/storage
+   chmod -R 775 /home/api.casi360.com/bootstrap/cache
+
+4. If composer.json changed, re-run:
+   composer install --no-dev --optimize-autoloader
+
+=========================================================
+
+
+=========================================================
+  QUICK DEPLOY — Run After Every Code Change
+=========================================================
+
+# 1. On your LOCAL machine, push changes to GitHub:
+cd "c:\Users\USER\Desktop\CASI 360\casi360.com\casi360\backend"
+git add .
+git commit -m "fix: describe your change here"
+git push origin main
+
+# 2. On the SERVER, pull and deploy:
+cd /home/api.casi360.com
+git fetch origin main
+git --work-tree=/home/api.casi360.com/_deploy_tmp checkout origin/main -- backend/
+
+# 3. Copy updated files (safe — only overwrites, never deletes):
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/app/* /home/api.casi360.com/app/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/bootstrap/* /home/api.casi360.com/bootstrap/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/config/* /home/api.casi360.com/config/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/database/* /home/api.casi360.com/database/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/routes/* /home/api.casi360.com/routes/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/resources/* /home/api.casi360.com/resources/
+cp -f /home/api.casi360.com/_deploy_tmp/backend/composer.json /home/api.casi360.com/composer.json
+
+# 4. If composer.json changed:
+composer update --no-dev --optimize-autoloader
+
+# 5. Clear caches and rebuild:
+php artisan optimize:clear && php artisan optimize
+
+# 6. If there are new migrations:
+php artisan migrate
+
+# 7. If permissions changed:
+php artisan db:seed --class=PermissionSeeder
+
+=========================================================
+
