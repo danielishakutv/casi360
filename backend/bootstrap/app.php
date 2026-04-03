@@ -33,16 +33,32 @@ return Application::configure(basePath: dirname(__DIR__))
             return true;
         });
 
+        // Helper: add CORS headers to error responses so 500s don't appear as CORS errors.
+        // When PHP crashes before the CORS middleware runs, the browser blocks the response
+        // because Access-Control-Allow-Origin is missing. This ensures it's always present.
+        $addCorsHeaders = function ($response, $request) {
+            $origin = $request->header('Origin');
+            $allowed = [
+                rtrim(env('FRONTEND_URL', 'https://casi360.com'), '/'),
+                'https://www.casi360.com',
+            ];
+            if ($origin && in_array(rtrim($origin, '/'), $allowed, true)) {
+                $response->headers->set('Access-Control-Allow-Origin', $origin);
+                $response->headers->set('Access-Control-Allow-Credentials', 'true');
+            }
+            return $response;
+        };
+
         // Return proper 401 JSON when unauthenticated (instead of "Route [login] not defined")
-        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
-            return response()->json([
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) use ($addCorsHeaders) {
+            return $addCorsHeaders(response()->json([
                 'success' => false,
                 'message' => 'Unauthenticated. Please log in.',
-            ], 401);
+            ], 401), $request);
         });
 
         // Global catch-all: never leak stack traces in production
-        $exceptions->render(function (\Throwable $e, $request) {
+        $exceptions->render(function (\Throwable $e, $request) use ($addCorsHeaders) {
             if (!$request->expectsJson()) {
                 return null; // Let Laravel handle non-JSON (shouldn't happen for API)
             }
@@ -54,11 +70,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
             $status = $e instanceof HttpException ? $e->getStatusCode() : 500;
 
-            return response()->json([
+            return $addCorsHeaders(response()->json([
                 'success' => false,
                 'message' => $status === 500
                     ? 'An unexpected error occurred. Please try again later.'
                     : $e->getMessage(),
-            ], $status);
+            ], $status), $request);
         });
     })->create();

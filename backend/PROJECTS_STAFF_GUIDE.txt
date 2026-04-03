@@ -1,0 +1,339 @@
+=========================================================
+  CASI360 — Projects Module: Staff User Guide
+  How It Works & How to Use It
+=========================================================
+
+
+WHAT IS THE PROJECTS MODULE?
+------------------------------------------------------------
+
+The Projects module is where you manage all organizational
+projects — from planning to completion. Each project is a
+standalone entity with its own budget, team, activities,
+donors, partners, and notes.
+
+Projects are NOT tied to any department. They stand on their
+own. You can optionally tag a department if it helps with
+organization, but it is never required.
+
+
+=========================================================
+CORE CONCEPTS
+=========================================================
+
+A PROJECT has:
+  - A name, description, and objectives
+  - An auto-generated code (e.g., PRJ-202604-0001)
+  - A status lifecycle (see below)
+  - A start date and optional end date
+  - A location (where the project operates)
+  - A currency (default: NGN)
+  - Optionally: a department and a project manager
+
+A project contains these sub-sections:
+  1. Team Members    — staff assigned to the project
+  2. Activities      — milestones/tasks with progress tracking
+  3. Budget          — line-item budget grouped by categories
+  4. Donors          — funding sources
+  5. Partners        — implementing/technical/funding partners
+  6. Notes           — internal observations and document links
+
+
+=========================================================
+PROJECT LIFECYCLE (Status Flow)
+=========================================================
+
+Every project goes through these statuses:
+
+  DRAFT  →  ACTIVE  →  COMPLETED
+                ↓
+            ON HOLD  →  ACTIVE (resume)
+                ↓
+              CLOSED
+
+  Draft       The project is being set up. Not yet started.
+              Use this when you're still planning.
+
+  Active      The project is underway. Team is working,
+              activities are being tracked, budget is being used.
+
+  On Hold     Temporarily paused (e.g., funding delay, review).
+              Can be resumed back to Active.
+
+  Completed   All activities are done. The project delivered
+              its objectives. Budget is finalized.
+
+  Closed      Permanently archived. A closed project cannot
+              be reopened. Deleting a project sets it to Closed.
+
+TYPICAL WORKFLOW:
+  1. Create project as "Draft"
+  2. Add team, budget, donors, partners
+  3. Change status to "Active" when work begins
+  4. Track activities and update progress
+  5. When all activities reach 100%, mark "Completed"
+
+
+=========================================================
+HOW TO: CREATE A NEW PROJECT
+=========================================================
+
+1. Go to Projects → All Projects
+2. Click "+ Create Project" (top right)
+3. Fill in the form:
+
+   Required fields:
+     - Project Name (e.g., "Community Health Outreach 2026")
+     - Start Date
+
+   Optional fields:
+     - Description (what the project is about)
+     - Objectives (what it aims to achieve)
+     - Department (if you want to organize by department)
+     - Project Manager (select from employee list)
+     - End Date
+     - Location
+     - Currency (defaults to NGN)
+     - Status (defaults to Draft)
+     - Notes (any internal remarks)
+
+4. Click Save. The system auto-generates a project code.
+
+
+=========================================================
+HOW TO: MANAGE TEAM MEMBERS
+=========================================================
+
+Team members are employees assigned to a project.
+
+1. Open a project → go to the "Team" tab
+2. Click "Add Team Member"
+3. Select an employee from the dropdown
+4. Assign a role (e.g., "Project Lead", "Field Officer")
+5. Optionally set start/end dates and notes
+6. Click Save
+
+Rules:
+  - An employee can only be added once per project
+  - You can change their role later via Edit
+  - Removing a member does not affect their employee record
+
+
+=========================================================
+HOW TO: TRACK ACTIVITIES / MILESTONES
+=========================================================
+
+Activities are the tasks or milestones that make up the project.
+
+1. Open a project → go to the "Activities" tab
+2. Click "Add Activity"
+3. Fill in:
+   - Title (e.g., "Community Mobilization")
+   - Description
+   - Start Date, End Date, Target Date
+   - Status: Not Started, In Progress, Completed, Delayed, Cancelled
+   - Completion Percentage (0–100%)
+
+4. As work progresses, update the completion percentage.
+   You can use the inline slider for quick updates.
+
+The summary bar at the top shows:
+  - How many activities are in each status
+  - Overall project progress
+
+TIP: The project's overall progress on the list page is
+calculated from activity completion. Keep activities updated!
+
+
+=========================================================
+HOW TO: MANAGE THE PROJECT BUDGET
+=========================================================
+
+The budget is built from individual budget lines, each
+belonging to a budget category (e.g., Personnel, Travel).
+
+STEP 1 — Ensure budget categories exist:
+  Go to Projects → Budget Categories
+  Add categories like: Personnel, Travel, Equipment, Supplies, etc.
+
+STEP 2 — Add budget lines to a project:
+  1. Open a project → go to the "Budget" tab
+  2. Click "Add Budget Line"
+  3. Fill in:
+     - Budget Category (select from dropdown)
+     - Description (e.g., "Project Coordinator Salary")
+     - Unit (e.g., "month", "trip", "unit")
+     - Quantity (e.g., 12)
+     - Unit Cost (e.g., 350,000)
+
+  The system auto-calculates:
+     Total Cost = Quantity x Unit Cost
+     Project Total Budget = Sum of all budget lines
+
+  When you add, edit, or delete a budget line, the project's
+  total budget updates automatically.
+
+The budget view shows:
+  - Total project budget at the top
+  - Lines grouped by category with subtotals
+  - Category breakdown (chart or summary)
+
+
+=========================================================
+HOW TO: MANAGE DONORS
+=========================================================
+
+Donors are the funding sources for a project.
+
+1. Open a project → go to the "Donors" tab
+2. Click "Add Donor"
+3. Fill in:
+   - Name (e.g., "Global Health Fund")
+   - Type: Individual, Organization, Government, Multilateral
+   - Email, Phone (optional contact info)
+   - Contribution Amount
+   - Notes
+
+The total contributions from all donors displays at the top.
+
+
+=========================================================
+HOW TO: MANAGE PARTNERS
+=========================================================
+
+Partners are organizations working alongside yours on a project.
+
+1. Open a project → go to the "Partners" tab
+2. Click "Add Partner"
+3. Fill in:
+   - Name (e.g., "Red Cross")
+   - Role: Implementing, Technical, Funding, Logistics
+   - Contact Person, Email, Phone
+   - Notes
+
+Partners are informational — they help you track who is
+involved in a project and in what capacity.
+
+
+=========================================================
+HOW TO: ADD PROJECT NOTES
+=========================================================
+
+Notes are internal records — observations, meeting summaries,
+decisions, or links to external documents.
+
+1. Open a project → go to the "Notes" tab
+2. Click "Add Note"
+3. Fill in:
+   - Title (e.g., "Site Visit Report — March 15")
+   - Content (detailed notes, can be long)
+   - Link URL (optional — e.g., a Google Docs link)
+   - Link Label (optional — displayed text for the link)
+
+The system auto-records who created each note and when.
+
+
+=========================================================
+BUDGET CATEGORIES (Admin Setup)
+=========================================================
+
+Budget categories are shared across ALL projects. They define
+the types of cost groupings you use.
+
+Common categories:
+  - Personnel (salaries, allowances)
+  - Travel (transport, accommodation)
+  - Equipment (laptops, tools)
+  - Supplies (office materials)
+  - Training (workshops, conferences)
+  - Professional Services (consultants)
+  - Overhead (rent, utilities)
+
+To manage:
+  1. Go to Projects → Budget Categories
+  2. Add, edit, or deactivate categories
+  3. Categories with a "sort_order" value appear in that order
+
+A category cannot be deleted if any project has budget lines
+using it. Deactivate it instead (set status to Inactive).
+
+
+=========================================================
+PROJECTS OVERVIEW DASHBOARD
+=========================================================
+
+The Overview page (Projects → Overview) shows:
+  - Total, Active, Completed project counts
+  - Total budget across all projects
+  - Status breakdown chart
+  - Projects grouped by department (if departments are used)
+  - 5 most recent projects
+
+Use this page to get a quick snapshot of your project portfolio.
+
+
+=========================================================
+PROJECT REPORTS
+=========================================================
+
+The Reports page (Projects → Reports) provides analytics:
+
+  - Portfolio Summary: total projects, budget, status distribution
+  - Budget Utilization: how budget is allocated across projects
+  - Activity Progress: completion rates across all projects
+  - Detailed Project Report: click any project for a full report
+
+Use reports for donor reporting, board presentations, and
+internal management reviews.
+
+
+=========================================================
+PERMISSIONS REQUIRED
+=========================================================
+
+Your admin assigns permissions. Here's what each allows:
+
+  projects.projects.view      — See project list and details
+  projects.projects.create    — Create new projects
+  projects.projects.edit      — Edit projects, manage team/donors/partners
+  projects.projects.delete    — Close (archive) projects
+
+  projects.activities.view    — See activities
+  projects.activities.create  — Add activities
+  projects.activities.edit    — Update activity status/progress
+  projects.activities.delete  — Remove activities
+
+  projects.budget.view        — See budget lines
+  projects.budget.create      — Add budget lines
+  projects.budget.edit        — Edit budget lines
+  projects.budget.delete      — Remove budget lines
+
+  projects.notes.view         — See project notes
+  projects.notes.create       — Add notes
+  projects.notes.edit         — Edit notes
+  projects.notes.delete       — Remove notes
+
+  projects.budget_categories.view    — See categories
+  projects.budget_categories.create  — Add categories
+  projects.budget_categories.edit    — Edit categories
+  projects.budget_categories.delete  — Delete categories
+
+  reports.reports.view         — Access project reports
+
+
+=========================================================
+QUICK REFERENCE CHEAT SHEET
+=========================================================
+
+  CREATE PROJECT:   Projects → All Projects → + Create Project
+  VIEW PROJECT:     Projects → All Projects → click a row
+  EDIT PROJECT:     Open project → click Edit
+  ADD TEAM:         Open project → Team tab → Add Team Member
+  ADD ACTIVITY:     Open project → Activities tab → Add Activity
+  ADD BUDGET LINE:  Open project → Budget tab → Add Budget Line
+  ADD DONOR:        Open project → Donors tab → Add Donor
+  ADD PARTNER:      Open project → Partners tab → Add Partner
+  ADD NOTE:         Open project → Notes tab → Add Note
+  MANAGE CATEGORIES: Projects → Budget Categories
+  VIEW REPORTS:     Projects → Reports
+  CLOSE PROJECT:    Open project → Delete (sets to Closed)

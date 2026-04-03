@@ -17,7 +17,7 @@ class UpdateProjectRequest extends FormRequest
             'name' => 'sometimes|string|max:255',
             'description' => 'nullable|string|max:5000',
             'objectives' => 'nullable|string|max:5000',
-            'department_id' => 'sometimes|uuid|exists:departments,id',
+            'department_id' => 'sometimes|nullable|uuid|exists:departments,id',
             'project_manager_id' => 'nullable|uuid|exists:employees,id',
             'start_date' => 'sometimes|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',

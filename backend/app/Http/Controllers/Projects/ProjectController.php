@@ -154,7 +154,7 @@ class ProjectController extends Controller
             ->map(function ($item) {
                 return [
                     'department_id' => $item->department_id,
-                    'department' => $item->department?->name,
+                    'department' => $item->department?->name ?? 'Unassigned',
                     'count' => $item->count,
                     'budget' => (float) $item->budget,
                 ];
