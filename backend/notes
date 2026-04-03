@@ -240,4 +240,110 @@ The backend `/procurement/purchase-orders` accepts: vendor_id, department_id, re
 | PO extra fields | ❌ Missing | Add pr_reference, rfq_reference, deliver-to section, payment_terms, signoffs |
 
 
-While integrating with the frontend, the frontend developer identified these gaps. Let's fix these so that it properly integrates correctly. I will still send some more gaps as they are identified
+-------------------------------------------
+EXTRA
+cd /home/api.casi360.com
+php artisan optimize:clear
+
+--------------------------------------------------------
+
+
+=========================================================
+  PROJECT MODULE — ALL ENDPOINTS
+=========================================================
+
+Base URL: /api/v1/projects
+Permission prefix: projects.*
+
+--- PROJECTS (CRUD + Stats) ---
+
+GET    /projects/stats                          ProjectController@stats              projects.projects.view
+GET    /projects                                ProjectController@index              projects.projects.view
+GET    /projects/{id}                           ProjectController@show               projects.projects.view
+POST   /projects                                ProjectController@store              projects.projects.create
+PATCH  /projects/{id}                           ProjectController@update             projects.projects.edit
+DELETE /projects/{id}                           ProjectController@destroy            projects.projects.delete
+
+  show returns toDetailArray() which includes:
+    - project fields (name, project_code, description, objectives, status, etc.)
+    - project_manager (name, resolved from employee)
+    - department (name, optional — nullable)
+    - total_budget, currency
+    - start_date, end_date, location
+    - team_member_count, activity_count, budget_line_count, donor_count, partner_count, note_count
+    - activity_progress (% completion)
+    - Full arrays: donors[], partners[], team_members[], activities[], budget_lines[], notes[]
+
+  stats returns:
+    - total, draft, active, on_hold, completed, closed counts
+    - total_budget (sum of non-closed)
+    - by_department breakdown
+
+  Required fields for create: name, start_date
+  Optional: description, objectives, department_id, project_manager_id, end_date, location, currency, status, notes
+
+--- BUDGET CATEGORIES ---
+
+GET    /projects/budget-categories              BudgetCategoryController@index       projects.budget_categories.view
+
+--- DONORS (nested under project) ---
+
+GET    /projects/{projectId}/donors             ProjectDonorController@index         projects.projects.view
+POST   /projects/{projectId}/donors             ProjectDonorController@store         projects.projects.edit
+PATCH  /projects/{projectId}/donors/{id}        ProjectDonorController@update        projects.projects.edit
+DELETE /projects/{projectId}/donors/{id}        ProjectDonorController@destroy       projects.projects.edit
+
+--- PARTNERS (nested under project) ---
+
+GET    /projects/{projectId}/partners           ProjectPartnerController@index       projects.projects.view
+POST   /projects/{projectId}/partners           ProjectPartnerController@store       projects.projects.edit
+PATCH  /projects/{projectId}/partners/{id}      ProjectPartnerController@update      projects.projects.edit
+DELETE /projects/{projectId}/partners/{id}      ProjectPartnerController@destroy     projects.projects.edit
+
+--- TEAM MEMBERS (nested under project) ---
+
+GET    /projects/{projectId}/team               ProjectTeamMemberController@index    projects.projects.view
+POST   /projects/{projectId}/team               ProjectTeamMemberController@store    projects.projects.edit
+PATCH  /projects/{projectId}/team/{id}          ProjectTeamMemberController@update   projects.projects.edit
+DELETE /projects/{projectId}/team/{id}          ProjectTeamMemberController@destroy  projects.projects.edit
+
+  Team member fields: employee_id (required, unique per project), role (default 'member'), start_date, end_date, notes
+
+--- ACTIVITIES (nested under project) ---
+
+GET    /projects/{projectId}/activities         ProjectActivityController@index      projects.activities.view
+POST   /projects/{projectId}/activities         ProjectActivityController@store      projects.activities.create
+PATCH  /projects/{projectId}/activities/{id}    ProjectActivityController@update     projects.activities.edit
+DELETE /projects/{projectId}/activities/{id}    ProjectActivityController@destroy    projects.activities.delete
+
+--- BUDGET LINES (nested under project) ---
+
+GET    /projects/{projectId}/budget-lines       ProjectBudgetLineController@index    projects.budget.view
+POST   /projects/{projectId}/budget-lines       ProjectBudgetLineController@store    projects.budget.create
+PATCH  /projects/{projectId}/budget-lines/{id}  ProjectBudgetLineController@update   projects.budget.edit
+DELETE /projects/{projectId}/budget-lines/{id}  ProjectBudgetLineController@destroy  projects.budget.delete
+
+  Adding/updating/deleting budget lines auto-recalculates project total_budget
+
+--- NOTES (nested under project) ---
+
+GET    /projects/{projectId}/notes              ProjectNoteController@index          projects.notes.view
+POST   /projects/{projectId}/notes              ProjectNoteController@store          projects.notes.create
+PATCH  /projects/{projectId}/notes/{id}         ProjectNoteController@update         projects.notes.edit
+DELETE /projects/{projectId}/notes/{id}         ProjectNoteController@destroy        projects.notes.delete
+
+--- PROJECT REPORTS ---
+
+GET    /reports/projects/summary                ProjectReportController@summary           reports.reports.view
+GET    /reports/projects/{id}/detail            ProjectReportController@detail            reports.reports.download
+GET    /reports/projects/budget-utilization     ProjectReportController@budgetUtilization  reports.reports.view
+GET    /reports/projects/activity-progress      ProjectReportController@activityProgress   reports.reports.view
+
+  All report endpoints support ?format=csv|excel|pdf for download
+
+NOTE: Projects are standalone (department_id is optional/nullable).
+      Only name and start_date are required to create a project.
+      Project manager and team members are optional.
+
+=========================================================
+

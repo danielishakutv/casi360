@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Project;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -18,7 +17,7 @@ class ProjectFactory extends Factory
             'name' => fake()->catchPhrase(),
             'description' => fake()->paragraph(),
             'objectives' => fake()->paragraph(),
-            'department_id' => Department::factory(),
+            'department_id' => null,
             'project_manager_id' => Employee::factory(),
             'start_date' => fake()->dateTimeBetween('-6 months', 'now'),
             'end_date' => fake()->dateTimeBetween('+3 months', '+2 years'),
