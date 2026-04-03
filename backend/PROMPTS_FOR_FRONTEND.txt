@@ -946,3 +946,381 @@ SUPPORTING (already exist):
   GET    /hr/employees?per_page=0                           → Dropdown for manager/team
 
 TOTAL: 33 endpoints consumed by this module (beneficiary endpoints hidden).
+
+
+
+=========================================================
+  FRONTEND PROMPT: Notices / Notifications Module
+  CASI360 — Care Aid Support Initiative
+  Date: April 3, 2026
+=========================================================
+
+OBJECTIVE:
+Integrate the backend Notices API into the frontend. Notices are the
+notification/announcement system — admins create targeted announcements
+and all users see relevant notices in their notification bell + a
+dedicated notices page under Communication.
+
+The backend is complete. This prompt describes every endpoint, field,
+and UI behavior the frontend must implement.
+
+=========================================================
+SIDEBAR LOCATION
+=========================================================
+
+Under the existing "Communication" sidebar group:
+
+  Communication
+    ├── Messages          → (existing)
+    ├── Forums            → (existing)
+    └── Notices           → /communication/notices
+
+The notification bell icon in the top navbar should also link to notices.
+
+Permissions controlling visibility:
+  - View notices list:     communication.notices.view
+  - Create notice:         communication.notices.create
+  - Edit notice:           communication.notices.edit
+  - Delete notice:         communication.notices.delete
+
+=========================================================
+API BASE
+=========================================================
+
+All endpoints prefixed with: /api/v1/communication
+Auth: Sanctum cookie-based SPA auth (same as all other modules)
+
+Standard response shape:
+{
+  "success": true,
+  "message": "...",
+  "data": { ... }
+}
+
+=========================================================
+ENDPOINTS
+=========================================================
+
+--- NOTICES STATS ---
+
+GET /communication/notices/stats
+Permission: communication.notices.view
+
+Response:
+{
+  "data": {
+    "total": 15,
+    "published": 10,
+    "draft": 3,
+    "archived": 2,
+    "pinned": 1
+  }
+}
+
+Use on the notices list page header as stat cards,
+and optionally on the Communication overview if one exists.
+
+--- LIST NOTICES ---
+
+GET /communication/notices
+Permission: communication.notices.view
+
+Query parameters:
+  ?search=keyword            Search title and body
+  ?status=draft|published|archived   Filter by status (super_admin only sees all statuses)
+  ?priority=normal|important|critical   Filter by priority
+  ?sort_by=title|priority|status|publish_date|created_at   (default: created_at)
+  ?sort_dir=asc|desc         (default: desc)
+  ?per_page=25               (max 100)
+  ?page=1
+
+Response:
+{
+  "data": {
+    "notices": [
+      {
+        "id": "uuid",
+        "author_id": "uuid",
+        "author_name": "Daniel Okonkwo",
+        "title": "Office Closure Notice",
+        "body": "The office will be closed on...",
+        "priority": "important",         // normal | important | critical
+        "status": "published",           // draft | published | archived
+        "publish_date": "2026-04-01",    // nullable
+        "expiry_date": "2026-04-30",     // nullable
+        "is_pinned": true,
+        "read_count": 8,
+        "is_read": false,                // whether current user has read it
+        "created_at": "2026-04-01T10:00:00.000000Z",
+        "updated_at": "2026-04-01T10:00:00.000000Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "per_page": 25,
+      "total": 15
+    }
+  }
+}
+
+BEHAVIOR:
+  - Pinned notices always appear first (backend handles this ordering)
+  - Non-admin users only see published notices targeted at them
+  - Super admin sees all notices regardless of status or audience
+  - Show unread indicator (dot/badge) on notices where is_read=false
+  - Priority badges: normal=gray, important=yellow/amber, critical=red
+
+--- VIEW SINGLE NOTICE ---
+
+GET /communication/notices/{id}
+Permission: communication.notices.view
+
+Response:
+{
+  "data": {
+    "notice": {
+      "id": "uuid",
+      "author_id": "uuid",
+      "author_name": "Daniel Okonkwo",
+      "title": "Office Closure Notice",
+      "body": "Full body content here...",
+      "priority": "important",
+      "status": "published",
+      "publish_date": "2026-04-01",
+      "expiry_date": "2026-04-30",
+      "is_pinned": true,
+      "read_count": 8,
+      "audiences": [
+        {
+          "id": "uuid",
+          "audience_type": "all",         // "all" | "department" | "role"
+          "audience_id": null,            // department UUID when type=department
+          "audience_role": null,          // "admin"|"manager"|"staff" when type=role
+          "label": "Everyone"            // resolved display label
+        }
+      ],
+      "is_read": true,
+      "created_at": "2026-04-01T10:00:00.000000Z",
+      "updated_at": "2026-04-01T10:00:00.000000Z"
+    }
+  }
+}
+
+BEHAVIOR:
+  - Viewing a notice auto-marks it as read (backend handles this)
+  - No separate "mark as read" endpoint needed
+  - Show audiences as tags/chips (e.g. "Everyone", "HR Department", "Managers")
+
+--- CREATE NOTICE ---
+
+POST /communication/notices
+Permission: communication.notices.create
+
+Request body:
+{
+  "title": "Office Closure Notice",                    // required, max 255
+  "body": "The office will be closed on Friday...",    // required, max 50000
+  "priority": "important",                             // optional, default "normal"
+  "status": "published",                               // optional, default "draft"
+  "publish_date": "2026-04-01",                        // optional
+  "expiry_date": "2026-04-30",                         // optional, must be >= publish_date
+  "is_pinned": false,                                  // optional, default false
+  "audiences": [                                       // required, at least 1
+    { "audience_type": "all" },
+    // OR target a department:
+    { "audience_type": "department", "audience_id": "dept-uuid" },
+    // OR target a role:
+    { "audience_type": "role", "audience_role": "manager" }
+  ]
+}
+
+FORM FIELDS:
+  Title:         text input (required)
+  Body:          rich text editor or textarea (required)
+  Priority:      select — Normal, Important, Critical
+  Status:        select — Draft, Published, Archived
+  Publish Date:  date picker (optional — if blank, publishes immediately)
+  Expiry Date:   date picker (optional — notice auto-hides after this date)
+  Pin Notice:    toggle/checkbox
+  Audiences:     multi-select with 3 types:
+                   "Everyone" → { audience_type: "all" }
+                   Department → { audience_type: "department", audience_id: "uuid" }
+                                (load departments from GET /hr/departments)
+                   Role       → { audience_type: "role", audience_role: "admin|manager|staff" }
+                 Allow multiple audience entries (e.g. "HR Dept" + "Managers")
+
+Response: 201 with the created notice (same shape as show)
+
+--- UPDATE NOTICE ---
+
+PATCH /communication/notices/{id}
+Permission: communication.notices.edit
+
+Request body: Same fields as create, all optional (send only changed fields).
+If "audiences" is sent, it replaces all existing audiences.
+
+Response: 200 with updated notice
+
+--- DELETE NOTICE ---
+
+DELETE /communication/notices/{id}
+Permission: communication.notices.delete
+
+Response:
+{
+  "success": true,
+  "message": "Notice deleted successfully",
+  "data": null
+}
+
+This is a hard delete (not soft-delete). Show confirmation dialog before deleting.
+
+--- VIEW READ RECEIPTS ---
+
+GET /communication/notices/{id}/reads
+Permission: communication.notices.view
+
+Response:
+{
+  "data": {
+    "notice_id": "uuid",
+    "title": "Office Closure Notice",
+    "total_reads": 8,
+    "total_users": 20,
+    "read_percentage": 40.0,
+    "reads": [
+      {
+        "user_id": "uuid",
+        "user_name": "Jane Doe",
+        "read_at": "2026-04-02T14:30:00.000000Z"
+      }
+    ]
+  }
+}
+
+Show this on the notice detail page as a "Read by" section or modal.
+Display read_percentage as a progress bar.
+Only visible to admins / super_admin (controlled by permission).
+
+=========================================================
+NOTIFICATION BELL (TOP NAVBAR)
+=========================================================
+
+The bell icon in the top-right header area should show:
+  - A red badge with the count of unread notices
+
+To get unread count, call the notices list and count where is_read=false,
+OR use the notices list with a small per_page to show a dropdown:
+
+  GET /communication/notices?per_page=5&sort_by=created_at&sort_dir=desc
+
+In the dropdown:
+  - Show the 5 most recent notices (title, priority badge, time ago)
+  - Unread notices should be visually distinct (bold title or dot indicator)
+  - "View All" link at bottom → navigates to /communication/notices
+  - Clicking a notice → navigates to /communication/notices/{id}
+
+Unread count for the badge:
+  - From the list response, count items where is_read === false
+  - Or keep a local counter that decrements when user views a notice
+  - Poll every 60 seconds (or on page focus) to refresh
+
+=========================================================
+NOTICES LIST PAGE  →  /communication/notices
+=========================================================
+
+LAYOUT:
+  Header: "Notices" with stat cards (total, published, draft, archived, pinned)
+  Filters row: search input, status dropdown, priority dropdown
+  Table or card list of notices
+
+TABLE COLUMNS (if table view):
+  | Pin icon | Title | Priority | Author | Publish Date | Status | Read Count | Actions |
+
+  - Pin icon: filled pin SVG for pinned notices, empty/hidden otherwise
+  - Priority: colored badge (gray/amber/red)
+  - Status: colored badge (blue=published, gray=draft, orange=archived)
+  - Read Count: number (clickable to open read receipts modal for admins)
+  - Actions: View, Edit (if permission), Delete (if permission)
+
+CARD VIEW (alternative):
+  Each notice as a card with title, priority badge, author, date, body preview.
+  Unread notices have a blue left border or unread dot.
+
+PERMISSIONS:
+  - Create button: only show if user has communication.notices.create
+  - Edit button: only show if user has communication.notices.edit
+  - Delete button: only show if user has communication.notices.delete
+  - Read receipts: only show link/button for admin/super_admin
+
+=========================================================
+NOTICE DETAIL PAGE  →  /communication/notices/{id}
+=========================================================
+
+Show full notice content:
+  - Title (large heading)
+  - Author name + date posted
+  - Priority badge
+  - Status badge (if admin, show draft/archived status)
+  - Pin indicator
+  - Full body content
+  - Audience tags (who this notice targets)
+  - Read receipts section (admin only): progress bar + list of readers
+
+Edit button → opens edit form (same as create form, pre-filled)
+Delete button → confirmation dialog then DELETE call
+Back button → return to notices list
+
+=========================================================
+CREATE / EDIT NOTICE PAGE (or Modal)
+=========================================================
+
+Can be a separate page (/communication/notices/create) or a slide-over/modal.
+
+Form fields:
+  - Title (text input, required)
+  - Body (textarea or rich text, required)
+  - Priority (dropdown: Normal, Important, Critical)
+  - Status (dropdown: Draft, Published, Archived)
+  - Publish Date (date picker, optional)
+  - Expiry Date (date picker, optional)
+  - Pin Notice (toggle)
+  - Audiences (audience builder):
+      Button: "+ Add Audience"
+      Each audience row has a type selector:
+        "Everyone" → no extra fields
+        "Department" → department dropdown (GET /hr/departments)
+        "Role" → role dropdown (Admin, Manager, Staff)
+      Can add multiple rows.
+      At least one audience is required.
+
+On submit:
+  - POST /communication/notices (create)
+  - PATCH /communication/notices/{id} (edit)
+
+=========================================================
+SUPPORTING ENDPOINTS
+=========================================================
+
+GET /hr/departments → populate department dropdown for audience targeting
+
+=========================================================
+ENDPOINT SUMMARY
+=========================================================
+
+  GET    /communication/notices/stats              → Stats for dashboard cards
+  GET    /communication/notices                    → List notices (paginated, filtered)
+  GET    /communication/notices/{id}               → View single notice (auto-marks read)
+  POST   /communication/notices                    → Create notice
+  PATCH  /communication/notices/{id}               → Update notice
+  DELETE /communication/notices/{id}               → Delete notice (hard delete)
+  GET    /communication/notices/{id}/reads         → Read receipts (admin)
+
+SUPPORTING:
+  GET    /hr/departments                           → Department dropdown for audiences
+
+TOTAL: 7 notice endpoints + 1 supporting = 8 endpoints consumed.
+
+=========================================================
+

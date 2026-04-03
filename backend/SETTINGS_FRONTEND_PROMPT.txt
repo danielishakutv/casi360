@@ -1,0 +1,1302 @@
+=========================================================
+  FRONTEND PROMPT: Settings Module — User Management,
+  Roles & Access, System Settings, Audit Log, Data & Backup
+  CASI360 — Care Aid Support Initiative
+  Date: April 3, 2026
+=========================================================
+
+OBJECTIVE:
+Implement the full Settings module for super_admin / admin users.
+This covers User Management (create, edit, role assignment, status toggle),
+Roles & Access (permission matrix), System Settings, Audit Log, and
+Data & Backup.  Everything here is backed by fully functional endpoints.
+
+DO NOT break anything already working.  Only touch files related to
+Settings pages and User Management.
+
+FRONTEND STACK:
+  - Vite + React (JSX, not TypeScript)
+  - React Router for routing
+  - Axios for HTTP requests
+  - No emojis — use SVG icons only
+  - No Next.js, no TypeScript
+
+=========================================================
+API CONVENTIONS (applies to every call)
+=========================================================
+
+Base URL:  VITE_API_BASE_URL  (e.g. https://api.casi360.com/api/v1)
+Auth:      Bearer token via Sanctum (cookie-based SPA auth)
+
+All responses follow:
+{
+  "success": true|false,
+  "message": "...",
+  "data": { ... }
+}
+
+Errors (422) include:
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": { "field": ["Error message"] }
+}
+
+IMPORTANT: All endpoints in this module require authentication AND
+admin-level access (super_admin or admin role) unless noted otherwise.
+
+
+=========================================================
+SIDEBAR / ROUTING
+=========================================================
+
+The Settings section should be in the sidebar (bottom or grouped under
+a gear icon).  Show ONLY to users with role super_admin or admin.
+
+  Settings
+    ├── User Management      → /settings/users                (CRUD users)
+    ├── Roles & Access       → /settings/roles                (permission matrix)
+    ├── System Settings      → /settings/general              (super_admin only)
+    ├── Audit Log            → /settings/audit-log            (super_admin only)
+    └── Data & Backup        → /settings/data                 (super_admin only)
+
+Visibility rules:
+  - User Management:   visible to super_admin AND admin
+  - Roles & Access:    visible to super_admin only
+  - System Settings:   visible to super_admin only
+  - Audit Log:         visible to super_admin only
+  - Data & Backup:     visible to super_admin only
+
+The current user's role is available from:
+  GET /auth/session → data.user.role
+
+
+=========================================================
+ACCOUNT TYPES (ROLES)
+=========================================================
+
+The system has 4 fixed account types.  They cannot be added or removed,
+only configured via the permissions matrix.
+
+  | Role         | Slug         | Description                              |
+  |--------------|--------------|------------------------------------------|
+  | Super Admin  | super_admin  | Full system access — all permissions      |
+  | Admin        | admin        | Administrative — most permissions         |
+  | Manager      | manager      | Department-level management               |
+  | Staff        | staff        | Standard access — limited permissions     |
+
+Key rules:
+  - super_admin always has ALL permissions (hardcoded, not configurable)
+  - Only super_admin can assign the super_admin role to other users
+  - Users cannot change their own role or status
+  - Super admin accounts cannot be deleted/deactivated
+
+
+#################################################################
+#                                                               #
+#       PAGE 1:  USER MANAGEMENT  →  /settings/users            #
+#                                                               #
+#################################################################
+
+Access: super_admin, admin
+
+=========================================================
+USER LIST
+=========================================================
+
+API CALL:
+  GET /auth/users
+  Role required: super_admin or admin
+
+Query Parameters:
+  | Param      | Type   | Default     | Options                                  |
+  |------------|--------|-------------|------------------------------------------|
+  | role       | string | —           | super_admin, admin, manager, staff        |
+  | status     | string | —           | active, inactive                          |
+  | department | string | —           | Filter by department name                 |
+  | search     | string | —           | Searches name and email                   |
+  | per_page   | int    | 25          | 1–100                                    |
+
+Response:
+{
+  "data": {
+    "users": [
+      {
+        "id": "uuid",
+        "name": "John Doe",
+        "email": "john@casi360.org",
+        "role": "admin",
+        "department": "Programs",
+        "phone": "+234 801 234 5678",
+        "avatar": null,
+        "status": "active",
+        "email_verified_at": "2026-01-15T10:00:00Z",
+        "last_login_at": "2026-04-03T08:30:00Z",
+        "force_password_change": false,
+        "created_at": "2026-01-15T10:00:00Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 3,
+      "per_page": 25,
+      "total": 62
+    }
+  }
+}
+
+UI REQUIREMENTS:
+  1. Search bar (debounced 300ms) filtering by name/email
+  2. Filter dropdowns:
+     - Role: All / Super Admin / Admin / Manager / Staff
+     - Status: All / Active / Inactive
+  3. Table columns:
+     - Name (with avatar placeholder if null — use initials in a circle)
+     - Email
+     - Role (badge: super_admin=purple, admin=blue, manager=green, staff=gray)
+     - Department
+     - Status (green dot = active, red dot = inactive)
+     - Last Login (relative time: "2 hours ago", "3 days ago")
+     - Actions
+  4. Row actions:
+     - View/Edit (opens edit modal)
+     - Change Role (opens role dropdown modal)
+     - Toggle Status (active ↔ inactive, with confirmation)
+     - Deactivate (sets status to inactive)
+  5. Pagination controls
+  6. "+ Create User" button (top right)
+  7. Show user count badges above the table:
+     - "Total: 62" / "Active: 58" / "Inactive: 4"
+
+
+=========================================================
+CREATE USER
+=========================================================
+
+API CALL:
+  POST /auth/register
+  Role required: super_admin or admin
+  Rate limited: 3 requests/minute
+
+Request body:
+  | Field      | Type   | Required | Rules                                                  |
+  |------------|--------|----------|--------------------------------------------------------|
+  | name       | string | YES      | Max 255                                                |
+  | email      | string | YES      | Valid email, unique in users table                      |
+  | password   | string | YES      | Min 8 chars, mixed case, numbers, symbols, uncompromised |
+  | role       | string | No       | super_admin, admin, manager, staff. Default: staff      |
+  | department | string | No       | Max 255. Free text or dropdown from departments list.   |
+  | phone      | string | No       | Max 20                                                 |
+
+IMPORTANT: Only super_admin can set role = "super_admin".  If an admin
+tries to create a super_admin user, the backend will reject it (403).
+
+Payload example:
+```json
+{
+  "name": "Jane Smith",
+  "email": "jane.smith@casi360.org",
+  "password": "SecureP@ss123!",
+  "role": "staff",
+  "department": "Finance",
+  "phone": "+234 801 555 0123"
+}
+```
+
+Response (201):
+{
+  "success": true,
+  "message": "User created successfully",
+  "data": {
+    "user": { ...user object... }
+  }
+}
+
+The new user will have:
+  - status: "active"
+  - force_password_change: true (forces password change on first login)
+
+UI — Create User Modal:
+  - Name: text input (required)
+  - Email: email input (required)
+  - Password: password input with strength indicator (required)
+    - Show rules: min 8 chars, uppercase + lowercase, number, symbol
+    - "Generate Password" button that creates a random strong password
+      and copies to clipboard
+  - Role: dropdown (Super Admin*, Admin, Manager, Staff)
+    * Super Admin option only visible if current user is super_admin
+  - Department: text input or dropdown
+    (optionally fetch from GET /hr/departments?per_page=0 for suggestions)
+  - Phone: text input (formatted phone)
+  - Note below form: "User will be required to change password on first login."
+
+Password validation rules (must ALL pass):
+  - Minimum 8 characters (configurable via PASSWORD_MIN_LENGTH env)
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one number
+  - At least one symbol (!@#$%^&* etc.)
+  - Must not be in known compromised password lists
+
+
+=========================================================
+VIEW / EDIT USER
+=========================================================
+
+API CALL (view):
+  GET /auth/users/{id}
+  Role required: super_admin or admin
+
+Response:
+{
+  "data": {
+    "user": {
+      "id": "uuid",
+      "name": "John Doe",
+      "email": "john@casi360.org",
+      "role": "admin",
+      "department": "Programs",
+      "phone": "+234 801 234 5678",
+      "avatar": null,
+      "status": "active",
+      "email_verified_at": "2026-01-15T10:00:00Z",
+      "last_login_at": "2026-04-03T08:30:00Z",
+      "force_password_change": false,
+      "created_at": "2026-01-15T10:00:00Z"
+    }
+  }
+}
+
+API CALL (update):
+  PATCH /auth/users/{id}
+  Role required: super_admin or admin
+
+Request body (all fields optional — send only what changed):
+  | Field      | Type   | Required | Rules                                     |
+  |------------|--------|----------|-------------------------------------------|
+  | name       | string | No       | Max 255                                   |
+  | email      | string | No       | Valid email, unique (except current user)  |
+  | phone      | string | No       | Max 20                                    |
+  | department | string | No       | Max 255                                   |
+  | status     | string | No       | active, inactive                          |
+
+NOTE: Role is NOT changed here — use the dedicated role endpoint.
+NOTE: Password is NOT changed here — users change their own passwords.
+
+Payload example:
+```json
+{
+  "name": "John D. Doe",
+  "department": "Operations",
+  "phone": "+234 801 999 0000"
+}
+```
+
+Response:
+{
+  "success": true,
+  "message": "User updated successfully",
+  "data": {
+    "user": { ...updated user object... }
+  }
+}
+
+UI — Edit User (modal or slide-over panel):
+  - Show user name + avatar area at top
+  - Editable fields: Name, Email, Phone, Department
+  - Status toggle: Active / Inactive (with visual switch)
+  - Read-only info section:
+    - Role (shown as badge — changed via separate action)
+    - Account created date
+    - Last login date
+    - Force password change status
+  - "Save Changes" button
+  - "Change Role" button (opens role modal)
+
+
+=========================================================
+CHANGE USER ROLE
+=========================================================
+
+API CALL:
+  PATCH /auth/users/{id}/role
+  Role required: super_admin or admin
+
+Request body:
+```json
+{
+  "role": "manager"
+}
+```
+
+Allowed values: super_admin, admin, manager, staff
+
+Backend rules:
+  - Only super_admin can assign the "super_admin" role
+  - Cannot change your own role (returns 403)
+  - Admin can assign: admin, manager, staff
+
+Response:
+{
+  "success": true,
+  "message": "User role updated from staff to manager",
+  "data": {
+    "user": { ...updated user object... }
+  }
+}
+
+UI — Change Role Modal:
+  - Show current role as a highlighted badge
+  - Role dropdown/radio buttons:
+    - Super Admin (only if current user is super_admin)
+    - Admin
+    - Manager
+    - Staff
+  - Short description next to each role:
+    - Super Admin: "Full system access with all permissions"
+    - Admin: "Administrative access with most permissions"
+    - Manager: "Department-level management access"
+    - Staff: "Standard staff access with limited permissions"
+  - Confirm dialog: "Change {user.name}'s role from {old} to {new}?"
+  - "Update Role" button
+
+
+=========================================================
+CHANGE USER STATUS
+=========================================================
+
+API CALL:
+  PATCH /auth/users/{id}/status
+  Role required: super_admin or admin
+
+Request body:
+```json
+{
+  "status": "inactive"
+}
+```
+
+Allowed values: active, inactive
+
+Backend rules:
+  - Cannot change your own status (returns 403)
+
+Response:
+{
+  "success": true,
+  "message": "User status changed to inactive",
+  "data": {
+    "user": { ...updated user object... }
+  }
+}
+
+UI:
+  - Toggle switch on the user row or in the edit modal
+  - Confirm dialog: "Deactivate {user.name}? They will not be able to log in."
+    (or "Activate {user.name}? They will be able to log in again.")
+
+
+=========================================================
+DEACTIVATE (DELETE) USER
+=========================================================
+
+API CALL:
+  DELETE /auth/users/{id}
+  Role required: super_admin or admin
+
+Backend rules:
+  - Does NOT hard-delete — sets status to "inactive"
+  - Cannot delete super_admin accounts (returns 403)
+  - Cannot delete yourself (returns 403)
+
+Response:
+{
+  "success": true,
+  "message": "User deactivated successfully"
+}
+
+UI:
+  - Confirm dialog: "Are you sure you want to deactivate this user?
+    They will no longer be able to log in."
+  - After success, update row status in the table (don't remove it)
+
+
+#################################################################
+#                                                               #
+#    PAGE 2:  ROLES & ACCESS  →  /settings/roles                #
+#                                                               #
+#################################################################
+
+Access: super_admin only
+
+This page has two parts:
+  A. Role overview (list of roles with user counts)
+  B. Permission matrix (toggle permissions for each role)
+
+=========================================================
+PART A: ROLE OVERVIEW
+=========================================================
+
+API CALL:
+  GET /settings/roles
+  Role required: super_admin
+
+Response:
+{
+  "data": {
+    "roles": [
+      {
+        "id": "super_admin",
+        "name": "Super Admin",
+        "slug": "super_admin",
+        "description": "Full system access with all permissions",
+        "user_count": 2
+      },
+      {
+        "id": "admin",
+        "name": "Admin",
+        "slug": "admin",
+        "description": "Administrative access with most permissions",
+        "user_count": 3
+      },
+      {
+        "id": "manager",
+        "name": "Manager",
+        "slug": "manager",
+        "description": "Department-level management access",
+        "user_count": 8
+      },
+      {
+        "id": "staff",
+        "name": "Staff",
+        "slug": "staff",
+        "description": "Standard staff access with limited permissions",
+        "user_count": 45
+      }
+    ]
+  }
+}
+
+API CALL (role detail with users):
+  GET /settings/roles/{slug}
+  Role required: super_admin
+
+Response:
+{
+  "data": {
+    "role": {
+      "id": "manager",
+      "name": "Manager",
+      "slug": "manager",
+      "description": "Department-level management access",
+      "user_count": 8,
+      "users": [
+        {
+          "id": "uuid",
+          "name": "John Doe",
+          "email": "john@casi360.org",
+          "role": "manager",
+          "status": "active",
+          "created_at": "2026-01-15T10:00:00Z"
+        }
+      ]
+    }
+  }
+}
+
+UI — Role Cards:
+  - Display 4 role cards in a grid (2×2 or horizontal row)
+  - Each card shows:
+    - Role name (large text)
+    - Description
+    - User count badge (e.g. "45 users")
+    - Click card → expand to show user list (or navigate to detail)
+  - Super Admin card should have a distinct color (purple/gold) to
+    indicate it has all permissions
+  - Note:  "Super Admin has all permissions enabled by default and
+    cannot be restricted."
+
+
+=========================================================
+PART B: PERMISSION MATRIX
+=========================================================
+
+API CALL:
+  GET /settings/permissions
+  Role required: super_admin
+
+Response:
+{
+  "data": {
+    "permissions": [
+      {
+        "id": "uuid",
+        "module": "hr",
+        "feature": "departments",
+        "action": "view",
+        "key": "hr.departments.view",
+        "description": "View departments",
+        "roles": {
+          "admin": true,
+          "manager": true,
+          "staff": true
+        }
+      },
+      {
+        "id": "uuid",
+        "module": "hr",
+        "feature": "departments",
+        "action": "create",
+        "key": "hr.departments.create",
+        "description": "Create departments",
+        "roles": {
+          "admin": true,
+          "manager": false,
+          "staff": false
+        }
+      },
+      {
+        "id": "uuid",
+        "module": "procurement",
+        "feature": "purchase_orders",
+        "action": "view",
+        "key": "procurement.purchase_orders.view",
+        "description": "View purchase orders",
+        "roles": {
+          "admin": true,
+          "manager": true,
+          "staff": true
+        }
+      }
+    ],
+    "roles": ["admin", "manager", "staff"]
+  }
+}
+
+NOTE: super_admin is NOT included in the matrix because it always
+has all permissions.  Only admin, manager, and staff are configurable.
+
+UI — Permission Matrix Table:
+
+Layout the matrix as a large table grouped by module:
+
+  | Permission                       | Admin | Manager | Staff |
+  |----------------------------------|-------|---------|-------|
+  | **HR**                           |       |         |       |
+  | View Departments                 |  ✓    |  ✓      |  ✓    |
+  | Create Departments               |  ✓    |  ✗      |  ✗    |
+  | Edit Departments                 |  ✓    |  ✗      |  ✗    |
+  | Delete Departments               |  ✓    |  ✗      |  ✗    |
+  | View Employees                   |  ✓    |  ✓      |  ✓    |
+  | Create Employees                 |  ✓    |  ✓      |  ✗    |
+  | ...                              |       |         |       |
+  | **Procurement**                  |       |         |       |
+  | View Purchase Orders             |  ✓    |  ✓      |  ✓    |
+  | Create Purchase Orders           |  ✓    |  ✓      |  ✗    |
+  | ...                              |       |         |       |
+
+Each cell is a TOGGLE SWITCH or CHECKBOX.
+Clicking a toggle immediately saves the change via the API.
+
+Group permissions by MODULE (hr, procurement, projects, communication,
+reports, settings).  Show module as a section header.
+Within each module, group by FEATURE, then list ACTIONS.
+
+Display the permission description (or format the key nicely):
+  - key "hr.departments.view" → "View Departments"
+  - key "procurement.purchase_orders.create" → "Create Purchase Orders"
+  - key "procurement.approval.manager_review" → "Manager Review Approval"
+
+Format: Capitalize the action, humanize the feature name.
+
+--- TOGGLE SINGLE PERMISSION ---
+
+API CALL:
+  PATCH /settings/permissions/{permission_id}
+  Role required: super_admin
+
+Request body:
+```json
+{
+  "role": "manager",
+  "allowed": true
+}
+```
+
+Response:
+{
+  "success": true,
+  "message": "Permission updated successfully",
+  "data": {
+    "role_permission": {
+      "id": "uuid",
+      "role": "manager",
+      "permission_key": "hr.departments.create",
+      "allowed": true
+    }
+  }
+}
+
+UI Behavior:
+  1. User clicks toggle → toggle visually flips immediately (optimistic)
+  2. API call fires in background
+  3. On success → show brief green toast "Permission updated"
+  4. On error → revert toggle, show red toast with error message
+
+--- BULK UPDATE PERMISSIONS ---
+
+For efficiency, provide a "Save All Changes" button that batches
+multiple changes into one API call.
+
+API CALL:
+  PATCH /settings/permissions/bulk
+  Role required: super_admin
+
+Request body:
+```json
+{
+  "permissions": [
+    {
+      "permission_id": "uuid-1",
+      "role": "manager",
+      "allowed": true
+    },
+    {
+      "permission_id": "uuid-2",
+      "role": "staff",
+      "allowed": false
+    }
+  ]
+}
+```
+
+Response:
+{
+  "success": true,
+  "message": "Permissions updated successfully",
+  "data": {
+    "updated": 2
+  }
+}
+
+UI approach options (choose one):
+  A. IMMEDIATE TOGGLE: Each click fires PATCH /settings/permissions/{id}
+     instantly. Simple and gives real-time feedback.
+  B. BATCH MODE: Track all changes locally, show a "Save Changes" bar at
+     bottom when unsaved changes exist, fire bulk endpoint on click.
+     Show count: "3 unsaved changes — Save | Discard"
+
+Recommendation: Use approach A (immediate toggle) for better UX, with
+approach B as a fallback via a "Batch Edit" toggle button.
+
+--- QUICK ACTIONS ---
+
+Add convenience buttons above the matrix:
+  1. "Select All" per role column — toggles all permissions on for a role
+  2. "Deselect All" per role column — toggles all off
+  3. "Copy from Role" — copy one role's permissions to another
+     (e.g. copy Admin → Manager, then remove specific ones)
+  These should use the bulk endpoint.
+
+--- SEARCH / FILTER ---
+
+  - Search box: filter permissions by description or key.
+    Client-side filter (already have all data).
+  - Module filter: dropdown to show only one module's permissions
+    (HR, Procurement, Projects, Communication, Reports, Settings)
+
+
+#################################################################
+#                                                               #
+#    PAGE 3:  SYSTEM SETTINGS  →  /settings/general             #
+#                                                               #
+#################################################################
+
+Access: super_admin only
+
+=========================================================
+LIST ALL SETTINGS
+=========================================================
+
+API CALL:
+  GET /settings/general
+  Role required: super_admin
+
+Response (grouped by group):
+{
+  "data": {
+    "settings": {
+      "organization": [
+        {
+          "id": "uuid",
+          "group": "organization",
+          "key": "organization.name",
+          "value": "Care Aid Support Initiative",
+          "type": "string",
+          "label": "Organization Name",
+          "description": "The name of the organization",
+          "is_public": true
+        },
+        {
+          "id": "uuid",
+          "group": "organization",
+          "key": "organization.email",
+          "value": "info@casi360.org",
+          "type": "string",
+          "label": "Organization Email",
+          "description": "Primary contact email",
+          "is_public": true
+        }
+      ],
+      "security": [
+        {
+          "id": "uuid",
+          "group": "security",
+          "key": "security.session_timeout",
+          "value": 60,
+          "type": "integer",
+          "label": "Session Timeout (minutes)",
+          "description": "Auto-logout after inactivity",
+          "is_public": false
+        }
+      ],
+      "procurement": [
+        {
+          "id": "uuid",
+          "group": "procurement",
+          "key": "procurement.approval.operations_threshold",
+          "value": 500000,
+          "type": "integer",
+          "label": "Operations Approval Threshold",
+          "description": "Amount above which operations approval is required",
+          "is_public": false
+        }
+      ]
+    }
+  }
+}
+
+UI — Settings Page:
+  - Render settings grouped by "group" as tabs or collapsible sections
+  - Section headers: "Organization", "Security", "Procurement", etc.
+  - Each setting renders based on its "type":
+    - string → text input
+    - integer → number input
+    - boolean → toggle switch
+    - json → textarea (formatted JSON) or structured editor
+  - Show "label" as the form label, "description" as help text below
+  - Mark public settings with a small "Public" badge
+
+--- UPDATE SINGLE SETTING ---
+
+API CALL:
+  PATCH /settings/general/{key}
+  Role required: super_admin
+
+Request body:
+```json
+{
+  "value": "New Value"
+}
+```
+
+The "key" is the full setting key (e.g. "organization.name").
+Note: Use the key as a URL segment (URL-encode if needed).
+
+Response:
+{
+  "success": true,
+  "message": "Setting updated successfully.",
+  "data": {
+    "setting": { ...full setting object... }
+  }
+}
+
+--- BULK UPDATE SETTINGS ---
+
+API CALL:
+  PATCH /settings/general/bulk
+  Role required: super_admin
+
+Request body:
+```json
+{
+  "settings": {
+    "organization.name": "CASI 360",
+    "security.session_timeout": 120,
+    "procurement.approval.operations_threshold": 750000
+  }
+}
+```
+
+Response:
+{
+  "success": true,
+  "message": "3 setting(s) updated successfully.",
+  "data": {
+    "updated": ["organization.name", "security.session_timeout", "procurement.approval.operations_threshold"],
+    "count": 3
+  }
+}
+
+UI behavior:
+  - Edit settings inline
+  - Track unsaved changes
+  - Show "Save Changes" button when changes exist
+  - Use bulk endpoint to save all at once
+  - On success, show green toast
+
+
+#################################################################
+#                                                               #
+#    PAGE 4:  AUDIT LOG  →  /settings/audit-log                 #
+#                                                               #
+#################################################################
+
+Access: super_admin only
+
+=========================================================
+AUDIT LOG LIST
+=========================================================
+
+API CALL:
+  GET /settings/audit-log
+  Role required: super_admin
+
+Query Parameters:
+  | Param       | Type   | Default | Options / Notes                           |
+  |-------------|--------|---------|-------------------------------------------|
+  | user_id     | uuid   | —       | Filter by user who performed the action   |
+  | action      | string | —       | Filter by action type                     |
+  | entity_type | string | —       | Filter by entity (user, employee, requisition, etc.) |
+  | date_from   | date   | —       | YYYY-MM-DD                                |
+  | date_to     | date   | —       | YYYY-MM-DD                                |
+  | search      | string | —       | Searches action, entity_type, user name   |
+  | per_page    | int    | 25      | 1–100                                     |
+
+Response:
+{
+  "data": {
+    "audit_logs": [
+      {
+        "id": "uuid",
+        "user": "John Doe",
+        "user_id": "uuid",
+        "action": "user_created",
+        "target": "user (uuid)",
+        "entity_type": "user",
+        "entity_id": "uuid",
+        "ip_address": "192.168.1.100",
+        "timestamp": "2026-04-03T10:30:00Z",
+        "old_values": null,
+        "new_values": { "name": "Jane Smith", "email": "jane@casi360.org", "role": "staff" }
+      },
+      {
+        "id": "uuid",
+        "user": "Admin User",
+        "user_id": "uuid",
+        "action": "role_changed",
+        "target": "user (uuid)",
+        "entity_type": "user",
+        "entity_id": "uuid",
+        "ip_address": "192.168.1.100",
+        "timestamp": "2026-04-03T09:15:00Z",
+        "old_values": { "role": "staff" },
+        "new_values": { "role": "manager" }
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 20,
+      "per_page": 25,
+      "total": 487
+    }
+  }
+}
+
+Common action values:
+  - user_created, user_updated, user_deactivated, role_changed,
+    user_status_changed, profile_updated, account_deactivated
+  - requisition_created, requisition_updated, requisition_submitted,
+    requisition_approved, requisition_rejected
+  - purchase_order_created, boq_created, boq_updated
+  - permission_updated, permissions_bulk_updated
+  - system_setting_updated
+  - data_exported, data_imported, backup_created
+  - employee_created, department_created, etc.
+
+UI REQUIREMENTS:
+  1. Search bar (debounced 300ms)
+  2. Filter dropdowns:
+     - Action type (derive from common action list above, or free text)
+     - Entity type (user, employee, requisition, purchase_order, boq, etc.)
+     - Date range picker (date_from / date_to)
+  3. Table columns:
+     - Timestamp (formatted: "Apr 3, 2026 10:30 AM")
+     - User (who performed the action)
+     - Action (human-readable badge, e.g. "User Created" → green,
+       "Role Changed" → blue, "Deactivated" → red)
+     - Target (entity_type + short entity_id)
+     - IP Address
+  4. Click a row to expand and show:
+     - old_values (before) and new_values (after) in a diff-like view
+     - Show changed fields highlighted
+     - Example: role: "staff" → "manager" (red → green)
+  5. Pagination
+  6. Export button (optional — could link to the data export endpoint)
+
+
+#################################################################
+#                                                               #
+#    PAGE 5:  DATA & BACKUP  →  /settings/data                  #
+#                                                               #
+#################################################################
+
+Access: super_admin only
+
+=========================================================
+DATA EXPORT
+=========================================================
+
+API CALL:
+  GET /settings/export
+  Role required: super_admin
+
+Query Parameters:
+  | Param    | Type   | Default | Options                           |
+  |----------|--------|---------|-----------------------------------|
+  | format   | string | json    | json, csv                         |
+  | entities | array  | all     | users, employees, departments     |
+
+Example: GET /settings/export?format=json&entities[]=users&entities[]=employees
+
+Response:
+{
+  "success": true,
+  "message": "Data exported successfully",
+  "data": {
+    "data": {
+      "users": [ ...array of user objects... ],
+      "employees": [ ...array of employee objects... ]
+    },
+    "exported_at": "2026-04-03T10:00:00Z",
+    "entities": ["users", "employees"],
+    "format": "json"
+  }
+}
+
+UI:
+  - Select which entities to export (checkboxes: Users, Employees, Departments)
+  - Format dropdown: JSON or CSV
+  - "Export" button
+  - On response, trigger a file download of the returned data
+    (create a Blob and download as .json or .csv)
+
+=========================================================
+DATA IMPORT
+=========================================================
+
+API CALL:
+  POST /settings/import
+  Role required: super_admin
+  Content-Type: multipart/form-data
+
+Request body:
+  | Field  | Type   | Required | Rules                     |
+  |--------|--------|----------|---------------------------|
+  | file   | file   | YES      | .json or .csv, max 10MB   |
+
+Response:
+{
+  "success": true,
+  "message": "Data import completed successfully",
+  "data": {
+    "message": "Data import initiated",
+    "filename": "backup-2026-04-01.json"
+  }
+}
+
+UI:
+  - File upload area (drag & drop or click to browse)
+  - Accept: .json, .csv files only
+  - Max size: 10 MB (show warning if exceeded)
+  - "Import" button
+  - Confirm dialog: "Importing data may overwrite existing records.
+    Are you sure you want to proceed?"
+  - Show progress indicator during upload
+
+=========================================================
+BACKUP
+=========================================================
+
+API CALL:
+  POST /settings/backup
+  Role required: super_admin
+  No body required.
+
+Response:
+{
+  "success": true,
+  "message": "Backup initiated successfully",
+  "data": {
+    "backup_id": "uuid",
+    "triggered_at": "2026-04-03T10:00:00Z",
+    "status": "initiated"
+  }
+}
+
+UI:
+  - "Create Backup" button with a database icon
+  - Confirm dialog: "Create a full system backup?"
+  - After success, show toast with backup_id and timestamp
+  - Optionally show a list of previous backups (from audit log entries
+    where action = "backup_created")
+
+
+#################################################################
+#                                                               #
+#    PERMISSION CHECK — FRONTEND IMPLEMENTATION                 #
+#                                                               #
+#################################################################
+
+The frontend needs a way to show/hide UI elements based on user
+permissions.  This is how to implement it:
+
+=========================================================
+FETCH CURRENT USER PERMISSIONS
+=========================================================
+
+API CALL:
+  GET /auth/permissions
+  Auth required: any logged-in user
+
+Response (for a manager):
+{
+  "data": {
+    "permissions": {
+      "hr.departments.view": true,
+      "hr.departments.create": false,
+      "hr.departments.edit": false,
+      "hr.departments.delete": false,
+      "hr.employees.view": true,
+      "hr.employees.create": true,
+      "procurement.vendors.view": true,
+      "procurement.purchase_orders.view": true,
+      "procurement.purchase_orders.create": true,
+      "procurement.approval.manager_review": true,
+      "procurement.approval.finance_check": false,
+      ...
+    }
+  }
+}
+
+Response (for super_admin — all keys are true):
+{
+  "data": {
+    "permissions": {
+      "hr.departments.view": true,
+      "hr.departments.create": true,
+      "hr.departments.edit": true,
+      ...every key is true...
+    }
+  }
+}
+
+IMPLEMENTATION:
+
+1. Fetch permissions once after login (or on app mount) and store in
+   React context or global state (e.g. AuthContext).
+
+2. Create a helper function:
+```jsx
+// In your auth context or utils
+const hasPermission = (key) => {
+  // super_admin always returns true
+  if (user.role === 'super_admin') return true;
+  return permissions[key] === true;
+};
+
+const hasAnyPermission = (keys) => {
+  if (user.role === 'super_admin') return true;
+  return keys.some(key => permissions[key] === true);
+};
+
+const isAdmin = () => {
+  return ['super_admin', 'admin'].includes(user.role);
+};
+
+const isSuperAdmin = () => {
+  return user.role === 'super_admin';
+};
+```
+
+3. Use in components:
+```jsx
+// Hide sidebar items
+{hasPermission('procurement.boq.view') && (
+  <SidebarItem to="/procurement/boq" label="BOQ" />
+)}
+
+// Hide buttons
+{hasPermission('procurement.requisitions.create') && (
+  <button>+ New Purchase Request</button>
+)}
+
+// Settings menu — only for admins
+{isAdmin() && (
+  <SidebarGroup label="Settings">
+    <SidebarItem to="/settings/users" label="User Management" />
+    {isSuperAdmin() && (
+      <>
+        <SidebarItem to="/settings/roles" label="Roles & Access" />
+        <SidebarItem to="/settings/general" label="System Settings" />
+        <SidebarItem to="/settings/audit-log" label="Audit Log" />
+        <SidebarItem to="/settings/data" label="Data & Backup" />
+      </>
+    )}
+  </SidebarGroup>
+)}
+
+// Approval buttons — only if user has the right approval permission
+{hasPermission(`procurement.approval.${currentStep.step_type}`) && (
+  <ApproveRejectButtons />
+)}
+```
+
+4. Refresh permissions after role changes (if the current user's
+   role is changed by a super_admin, the session permissions are stale).
+   Recommendation: re-fetch on each navigation or every 5 minutes.
+
+5. IMPORTANT: Frontend permission checks are for UX only (hiding buttons).
+   The backend ALWAYS enforces permissions, so even if the frontend shows
+   a button, unauthorized API calls will return 403.
+
+
+=========================================================
+AUTHENTICATION FLOW (reference)
+=========================================================
+
+For complete reference, these are the auth endpoints:
+
+| Method | Endpoint                    | Purpose                    | Auth Required |
+|--------|----------------------------|----------------------------|---------------|
+| POST   | /auth/login                | Log in                     | No            |
+| POST   | /auth/logout               | Log out                    | Yes           |
+| GET    | /auth/session              | Get current user + session | Yes           |
+| POST   | /auth/change-password      | Change own password        | Yes           |
+| GET    | /auth/profile              | Get own profile            | Yes           |
+| PATCH  | /auth/profile              | Update own profile         | Yes           |
+| DELETE | /auth/account              | Deactivate own account     | Yes           |
+| POST   | /auth/forgot-password      | Request reset email        | No            |
+| POST   | /auth/reset-password       | Reset with token           | No            |
+| GET    | /auth/permissions          | Current user's permissions | Yes           |
+| POST   | /auth/register             | Create user (admin only)   | Yes (admin)   |
+| GET    | /auth/users                | List users (admin only)    | Yes (admin)   |
+| GET    | /auth/users/{id}           | Get user (admin only)      | Yes (admin)   |
+| PATCH  | /auth/users/{id}           | Update user (admin only)   | Yes (admin)   |
+| DELETE | /auth/users/{id}           | Deactivate user (admin)    | Yes (admin)   |
+| PATCH  | /auth/users/{id}/role      | Change role (admin)        | Yes (admin)   |
+| PATCH  | /auth/users/{id}/status    | Change status (admin)      | Yes (admin)   |
+
+Login payload:
+```json
+{
+  "email": "admin@casi360.org",
+  "password": "SecureP@ss123!"
+}
+```
+
+Login response:
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "user": { ...user object... },
+    "token": "plaintext-token-string"
+  }
+}
+```
+
+After login, set the token in Axios default headers:
+```jsx
+axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+```
+
+Change password payload:
+```json
+{
+  "current_password": "OldP@ss123!",
+  "new_password": "NewSecureP@ss456!",
+  "new_password_confirmation": "NewSecureP@ss456!"
+}
+```
+
+Password rules (same as registration):
+  - Min 8 chars, mixed case, numbers, symbols
+  - Must differ from current password
+  - Confirmation must match
+
+Force password change:
+  - If user.force_password_change is true after login, redirect to
+    a "Change Password" screen before allowing access to the app
+  - The /auth/session and /auth/logout endpoints still work during
+    forced password change, but all other routes return 403
+
+
+=========================================================
+ERROR HANDLING
+=========================================================
+
+Always check response.success. On false:
+  - 401: Redirect to login page. Clear stored token/session.
+  - 403: Show "Permission denied" toast.  Do NOT redirect.
+         The user is authenticated but lacks the required role/permission.
+  - 404: Show "Not found" message
+  - 422: Display field-level errors under form fields
+  - 429: Rate limited — show "Too many requests. Please wait."
+  - 500: Show generic "Server error, please try again" toast
+
+For rate-limited endpoints:
+  - POST /auth/register: 3 requests/minute
+  - POST /auth/login: 5 requests/minute
+  - POST /auth/forgot-password: 3 requests/minute
+  - Most settings mutations: 60 requests/minute
+
+
+=========================================================
+NOTES FOR FRONTEND DEVELOPER
+=========================================================
+
+1. Roles are FIXED — there are exactly 4 account types (super_admin,
+   admin, manager, staff).  There is no "create role" or "delete role"
+   functionality.  Roles are managed only by assigning permissions.
+
+2. Super admin always has ALL permissions.  The permission matrix only
+   configures admin, manager, and staff roles.
+
+3. Every mutation endpoint is audit-logged automatically.  The Audit Log
+   page simply reads back these logs.
+
+4. User passwords are never returned by the API.  Admins cannot see or
+   reset passwords — users must use "Forgot Password" or be given
+   force_password_change on their next login.
+
+5. The "department" field on the User model is a free-text string (not a
+   foreign key to the departments table).  This is intentional — system
+   users aren't necessarily HR employees.  But for convenience, offer
+   department suggestions from the HR departments list.
+
+6. System Settings are pre-seeded in the database.  There is no
+   "create setting" endpoint — super_admin can only UPDATE existing
+   settings.  If new settings are needed, they're added via migration.
+
+7. The frontend should call GET /auth/permissions on app initialization
+   (after successful login) and store the result globally.  Use it to
+   conditionally render sidebar items, buttons, and pages.
+
+8. Use SVG icons throughout — no emojis.
+
+=========================================================
+END OF PROMPT
+=========================================================

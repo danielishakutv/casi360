@@ -17,6 +17,7 @@ class BoqItem extends Model
         'quantity',
         'unit_rate',
         'total',
+        'comment',
     ];
 
     protected $casts = [
@@ -41,6 +42,7 @@ class BoqItem extends Model
             'quantity' => (float) $this->quantity,
             'unit_rate' => (float) $this->unit_rate,
             'total' => (float) $this->total,
+            'comment' => $this->comment,
         ];
     }
 }

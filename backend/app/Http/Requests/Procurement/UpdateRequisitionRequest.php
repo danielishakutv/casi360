@@ -34,6 +34,7 @@ class UpdateRequisitionRequest extends FormRequest
             'signoffs.*.type' => 'required|string|max:100',
             'signoffs.*.name' => 'nullable|string|max:255',
             'signoffs.*.position' => 'nullable|string|max:255',
+            'signoffs.*.email' => 'nullable|email|max:255',
             'signoffs.*.date' => 'nullable|date',
             'signoffs.*.signature' => 'nullable|string|max:500',
             'status' => 'nullable|in:draft',
