@@ -94,12 +94,18 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'requisitions', 'action' => 'edit', 'description' => 'Edit requisition details'],
             ['module' => 'procurement', 'feature' => 'requisitions', 'action' => 'delete', 'description' => 'Cancel requisitions'],
 
-            // --- Procurement: Approval Workflow ---
+            // --- Procurement: Approval Workflow (legacy — used by Purchase Orders) ---
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'manager_review', 'description' => 'Act on Manager Review approval steps'],
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'finance_check', 'description' => 'Act on Finance Verification approval steps'],
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'operations_approval', 'description' => 'Act on Operations Approval steps (>threshold)'],
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'executive_approval', 'description' => 'Act on Executive Director Approval steps (>threshold)'],
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'self_approve', 'description' => 'Allow approving own submissions (overrides self-approval block)'],
+
+            // --- Procurement: Purchase Request Approval Workflow (3-stage fixed chain) ---
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'view',         'description' => 'View the Approvals page and pending purchase requests'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'budget_holder', 'description' => 'Act as Budget Holder — Stage 1 PR approval'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'finance',       'description' => 'Act as Finance approver — Stage 2 PR approval (approve final or forward)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'operations',    'description' => 'Act as Operations approver — Stage 3 PR approval (only when forwarded by Finance)'],
 
             // --- Procurement: Disbursements ---
             ['module' => 'procurement', 'feature' => 'disbursements', 'action' => 'view', 'description' => 'View disbursement records'],
@@ -270,6 +276,10 @@ class PermissionSeeder extends Seeder
                 'procurement.approval.operations_approval' => false,
                 'procurement.approval.executive_approval' => false,
                 'procurement.approval.self_approve' => false,
+                'procurement.approvals.view'         => true,
+                'procurement.approvals.budget_holder' => true,
+                'procurement.approvals.finance'       => true,
+                'procurement.approvals.operations'    => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => true,
                 'procurement.vendor_categories.view' => true,
@@ -391,6 +401,10 @@ class PermissionSeeder extends Seeder
                 'procurement.approval.operations_approval' => false,
                 'procurement.approval.executive_approval' => false,
                 'procurement.approval.self_approve' => false,
+                'procurement.approvals.view'         => true,
+                'procurement.approvals.budget_holder' => true,
+                'procurement.approvals.finance'       => false,
+                'procurement.approvals.operations'    => false,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,
@@ -512,6 +526,10 @@ class PermissionSeeder extends Seeder
                 'procurement.approval.operations_approval' => false,
                 'procurement.approval.executive_approval' => false,
                 'procurement.approval.self_approve' => false,
+                'procurement.approvals.view'         => true,
+                'procurement.approvals.budget_holder' => false,
+                'procurement.approvals.finance'       => false,
+                'procurement.approvals.operations'    => false,
                 'procurement.disbursements.view' => false,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,

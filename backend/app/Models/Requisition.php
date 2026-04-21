@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace App\Models;
 
@@ -17,6 +17,7 @@ class Requisition extends Model
         'submitted_by',
         'purchase_order_id',
         'title',
+        'date',
         'justification',
         'priority',
         'needed_by',
@@ -37,12 +38,13 @@ class Requisition extends Model
     protected function casts(): array
     {
         return [
-            'needed_by' => 'date',
-            'estimated_cost' => 'decimal:2',
+            'date'             => 'date',
+            'needed_by'        => 'date',
+            'estimated_cost'   => 'decimal:2',
             'logistics_involved' => 'boolean',
-            'boq' => 'boolean',
-            'exchange_rate' => 'decimal:4',
-            'signoffs' => 'array',
+            'boq'              => 'boolean',
+            'exchange_rate'    => 'decimal:4',
+            'signoffs'         => 'array',
         ];
     }
 
@@ -99,6 +101,16 @@ class Requisition extends Model
         return $this->hasMany(RequisitionItem::class);
     }
 
+    /** New 3-stage approval chain (budget_holder → finance → operations). */
+    public function approvals()
+    {
+        return $this->hasMany(RequisitionApproval::class)->orderBy('stage_order');
+    }
+
+    /**
+     * Legacy polymorphic steps — kept for PO compatibility; NOT used for
+     * requisition approvals any more.
+     */
     public function approvalSteps()
     {
         return $this->morphMany(ApprovalStep::class, 'approvable');
@@ -113,45 +125,53 @@ class Requisition extends Model
         return $this->items()->count();
     }
 
-    public function getCurrentApprovalStepAttribute(): ?ApprovalStep
+    /**
+     * Returns the stage key of the currently-pending approval stage, or null
+     * if no stage is pending (fully approved / rejected / not yet submitted).
+     */
+    public function getActiveStageAttribute(): ?string
     {
-        return $this->approvalSteps()
-            ->where('status', 'pending')
-            ->orderBy('step_order')
-            ->first();
+        if ($this->relationLoaded('approvals')) {
+            return $this->approvals->firstWhere('status', 'pending')?->stage;
+        }
+
+        return $this->approvals()->where('status', 'pending')->value('stage');
     }
 
     public function getApprovalProgressAttribute(): array
     {
-        $steps = $this->approvalSteps()->orderBy('step_order')->get();
-        if ($steps->isEmpty()) {
-            return ['total' => 0, 'completed' => 0, 'current_step' => null];
+        if ($this->relationLoaded('approvals')) {
+            $approvals = $this->approvals;
+        } else {
+            $approvals = $this->approvals()->get();
         }
 
+        if ($approvals->isEmpty()) {
+            return ['completed' => 0, 'total' => 0];
+        }
+
+        $completed = $approvals->whereIn('status', ['approved', 'forwarded', 'skipped'])->count();
+
         return [
-            'total' => $steps->count(),
-            'completed' => $steps->where('status', 'approved')->count(),
-            'current_step' => $steps->firstWhere('status', 'pending')?->toApiArray(),
+            'completed' => $completed,
+            'total'     => $approvals->count(),
         ];
     }
 
     /* ----------------------------------------------------------------
-     * Auto-generate requisition number
+     * Auto-generate requisition number  (PR-YYYY-NNNN)
      * ---------------------------------------------------------------- */
 
     public static function generateRequisitionNumber(): string
     {
-        $prefix = 'REQ-' . now()->format('Ym');
-        $latest = self::where('requisition_number', 'like', $prefix . '%')
+        $prefix = 'PR-' . now()->format('Y');
+        $latest = self::where('requisition_number', 'like', $prefix . '-%')
             ->orderBy('requisition_number', 'desc')
             ->first();
 
-        if ($latest) {
-            $lastNumber = (int) substr($latest->requisition_number, -4);
-            $nextNumber = $lastNumber + 1;
-        } else {
-            $nextNumber = 1;
-        }
+        $nextNumber = $latest
+            ? ((int) substr($latest->requisition_number, -4)) + 1
+            : 1;
 
         return $prefix . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
@@ -168,97 +188,116 @@ class Requisition extends Model
     }
 
     /* ----------------------------------------------------------------
-     * Approval Workflow
+     * Approval Chain — create / reset
      * ---------------------------------------------------------------- */
 
-    public function generateApprovalSteps(): void
+    /**
+     * Create (or reset) the fixed 3-stage approval chain.
+     * Called when a PR is submitted or re-submitted after revision.
+     */
+    public function createApprovalChain(): void
     {
-        $this->approvalSteps()->delete();
+        $this->approvals()->delete();
 
-        $amount = (float) $this->estimated_cost;
-        $order = 1;
-
-        $steps = [
+        $this->approvals()->createMany([
             [
-                'step_type' => 'manager_review',
-                'step_label' => 'Manager Review',
-                'required' => true,
+                'stage'       => 'budget_holder',
+                'stage_order' => 1,
+                'stage_label' => 'Budget Holder',
+                'status'      => 'pending',
             ],
             [
-                'step_type' => 'finance_check',
-                'step_label' => 'Finance Verification',
-                'required' => true,
+                'stage'       => 'finance',
+                'stage_order' => 2,
+                'stage_label' => 'Finance',
+                'status'      => 'waiting',
             ],
             [
-                'step_type' => 'operations_approval',
-                'step_label' => 'Operations Approval',
-                'required' => $amount > (float) SystemSetting::getValue('procurement.approval.operations_threshold', 500000),
+                'stage'       => 'operations',
+                'stage_order' => 3,
+                'stage_label' => 'Operations',
+                'status'      => 'waiting',
             ],
-            [
-                'step_type' => 'executive_approval',
-                'step_label' => 'Executive Director Approval',
-                'required' => $amount > (float) SystemSetting::getValue('procurement.approval.executive_threshold', 1000000),
-            ],
-        ];
-
-        foreach ($steps as $step) {
-            if ($step['required']) {
-                $this->approvalSteps()->create([
-                    'approvable_type' => 'requisition',
-                    'step_order' => $order++,
-                    'step_type' => $step['step_type'],
-                    'step_label' => $step['step_label'],
-                    'status' => 'pending',
-                ]);
-            }
-        }
+        ]);
     }
 
     /* ----------------------------------------------------------------
-     * Serialization
+     * Serialization helpers
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Compact chain for list / pending-approvals responses.
+     * Includes actor_name + decided_at but omits actor_id, position, comments.
+     */
+    private function getApprovalChainCompact(): array
+    {
+        if ($this->relationLoaded('approvals')) {
+            return $this->approvals->map->toApiArray(false)->toArray();
+        }
+
+        return $this->approvals()->get()->map->toApiArray(false)->toArray();
+    }
+
+    /**
+     * Full chain for detail responses — includes all actor fields and comments.
+     */
+    private function getApprovalChainDetailed(): array
+    {
+        if ($this->relationLoaded('approvals')) {
+            return $this->approvals->map->toApiArray(true)->toArray();
+        }
+
+        return $this->approvals()->get()->map->toApiArray(true)->toArray();
+    }
+
+    /* ----------------------------------------------------------------
+     * API Serialization
      * ---------------------------------------------------------------- */
 
     public function toApiArray(): array
     {
         return [
-            'id' => $this->id,
-            'requisition_number' => $this->requisition_number,
-            'department_id' => $this->department_id,
-            'department' => $this->department?->name,
-            'requested_by' => $this->requested_by,
-            'requested_by_name' => $this->requestedBy?->name,
-            'submitted_by' => $this->submitted_by,
-            'submitted_by_name' => $this->submittedBy?->name,
-            'purchase_order_id' => $this->purchase_order_id,
+            'id'                    => $this->id,
+            'requisition_number'    => $this->requisition_number,
+            'title'                 => $this->title,
+            'date'                  => $this->date?->toDateString(),
+            'department_id'         => $this->department_id,
+            'department'            => $this->department?->name,
+            'requested_by'          => $this->requested_by,
+            'requested_by_name'     => $this->requestedBy?->name,
+            'submitted_by'          => $this->submitted_by,
+            'submitted_by_name'     => $this->submittedBy?->name,
+            'purchase_order_id'     => $this->purchase_order_id,
             'purchase_order_number' => $this->purchaseOrder?->po_number,
-            'title' => $this->title,
-            'justification' => $this->justification,
-            'priority' => $this->priority,
-            'needed_by' => $this->needed_by?->toDateString(),
-            'estimated_cost' => (float) $this->estimated_cost,
-            'notes' => $this->notes,
-            'delivery_location' => $this->delivery_location,
-            'purchase_scenario' => $this->purchase_scenario,
-            'logistics_involved' => $this->logistics_involved,
-            'boq' => $this->boq,
-            'project_code' => $this->project_code,
-            'donor' => $this->donor,
-            'currency' => $this->currency,
-            'exchange_rate' => $this->exchange_rate ? (float) $this->exchange_rate : null,
-            'signoffs' => $this->signoffs,
-            'item_count' => $this->item_count,
-            'status' => $this->status,
-            'approval_progress' => $this->approval_progress,
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'justification'         => $this->justification,
+            'priority'              => $this->priority,
+            'needed_by'             => $this->needed_by?->toDateString(),
+            'estimated_cost'        => (float) $this->estimated_cost,
+            'item_count'            => $this->item_count,
+            'notes'                 => $this->notes,
+            'delivery_location'     => $this->delivery_location,
+            'purchase_scenario'     => $this->purchase_scenario,
+            'logistics_involved'    => $this->logistics_involved,
+            'boq'                   => $this->boq,
+            'project_code'          => $this->project_code,
+            'donor'                 => $this->donor,
+            'currency'              => $this->currency,
+            'exchange_rate'         => $this->exchange_rate ? (float) $this->exchange_rate : null,
+            'signoffs'              => $this->signoffs,
+            'status'                => $this->status,
+            'active_stage'          => $this->active_stage,
+            'approval_progress'     => $this->approval_progress,
+            'approval_chain'        => $this->getApprovalChainCompact(),
+            'created_at'            => $this->created_at?->toISOString(),
+            'updated_at'            => $this->updated_at?->toISOString(),
         ];
     }
 
     public function toDetailArray(): array
     {
         return array_merge($this->toApiArray(), [
-            'items' => $this->items->map->toApiArray()->toArray(),
-            'approval_steps' => $this->approvalSteps()->orderBy('step_order')->get()->map->toApiArray()->toArray(),
+            'items'          => $this->items->map->toApiArray()->toArray(),
+            'approval_chain' => $this->getApprovalChainDetailed(),
         ]);
     }
 }

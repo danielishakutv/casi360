@@ -19,7 +19,7 @@ class RequisitionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Requisition::with(['department', 'requestedBy', 'submittedBy', 'purchaseOrder']);
+        $query = Requisition::with(['department', 'requestedBy', 'submittedBy', 'purchaseOrder', 'approvals']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -48,7 +48,7 @@ class RequisitionController extends Controller
             });
         }
 
-        $sortBy = $request->input('sort_by', 'created_at');
+        $sortBy  = $request->input('sort_by', 'created_at');
         $sortDir = $request->input('sort_dir', 'desc');
         $allowedSorts = ['requisition_number', 'title', 'priority', 'estimated_cost', 'status', 'needed_by', 'created_at'];
         if (in_array($sortBy, $allowedSorts)) {
@@ -57,13 +57,11 @@ class RequisitionController extends Controller
 
         $perPage = min((int) $request->input('per_page', 25), 100);
 
-        if ($perPage == 0) {
+        if ($perPage === 0) {
             $requisitions = $query->get();
             return $this->success([
                 'requisitions' => $requisitions->map->toApiArray(),
-                'meta' => [
-                    'total' => $requisitions->count(),
-                ],
+                'meta'         => ['total' => $requisitions->count()],
             ]);
         }
 
@@ -71,11 +69,13 @@ class RequisitionController extends Controller
 
         return $this->success([
             'requisitions' => collect($paginated->items())->map->toApiArray(),
-            'meta' => [
+            'meta'         => [
                 'current_page' => $paginated->currentPage(),
-                'last_page' => $paginated->lastPage(),
-                'per_page' => $paginated->perPage(),
-                'total' => $paginated->total(),
+                'last_page'    => $paginated->lastPage(),
+                'per_page'     => $paginated->perPage(),
+                'total'        => $paginated->total(),
+                'from'         => $paginated->firstItem(),
+                'to'           => $paginated->lastItem(),
             ],
         ]);
     }
@@ -86,24 +86,29 @@ class RequisitionController extends Controller
     public function store(StoreRequisitionRequest $request): JsonResponse
     {
         return DB::transaction(function () use ($request) {
-            $data = $request->validated();
+            $data  = $request->validated();
             $items = $data['items'] ?? [];
             unset($data['items']);
 
+            // Always derive requested_by from the authenticated session
+            $data['requested_by']      = auth()->user()->employee?->id ?? $data['requested_by'] ?? null;
             $data['requisition_number'] = Requisition::generateRequisitionNumber();
-            $data['status'] = 'draft';
+            $data['status']            = 'draft';
 
             $requisition = Requisition::create($data);
 
             foreach ($items as $item) {
-                $item['requisition_id'] = $requisition->id;
-                $item['estimated_total_cost'] = $item['quantity'] * $item['estimated_unit_cost'];
+                if (empty(trim($item['description'] ?? ''))) {
+                    continue;
+                }
+                $item['requisition_id']      = $requisition->id;
+                $item['estimated_total_cost'] = ($item['quantity'] ?? 1) * ($item['estimated_unit_cost'] ?? 0);
                 RequisitionItem::create($item);
             }
 
             $requisition->recalculateEstimatedCost();
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
 
             AuditLog::record(
                 auth()->id(),
@@ -116,7 +121,7 @@ class RequisitionController extends Controller
 
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
-            ], 'Requisition created successfully', 201);
+            ], 'Purchase request created successfully', 201);
         });
     }
 
@@ -127,7 +132,7 @@ class RequisitionController extends Controller
     {
         $requisition = Requisition::with([
             'department', 'requestedBy', 'submittedBy', 'purchaseOrder',
-            'items.inventoryItem', 'approvalSteps',
+            'items.inventoryItem', 'approvals',
         ])->findOrFail($id);
 
         return $this->success([
@@ -140,17 +145,17 @@ class RequisitionController extends Controller
      */
     public function update(UpdateRequisitionRequest $request, string $id): JsonResponse
     {
-        $requisition = Requisition::with(['department', 'requestedBy', 'submittedBy', 'items'])
+        $requisition = Requisition::with(['department', 'requestedBy', 'submittedBy', 'items', 'approvals'])
             ->findOrFail($id);
 
         if (!in_array($requisition->status, ['draft', 'revision'])) {
-            return $this->error('Only draft or revision requisitions can be edited.', 422);
+            return $this->error('Only draft or revision purchase requests can be edited.', 422);
         }
 
         $oldValues = $requisition->toApiArray();
 
         return DB::transaction(function () use ($request, $requisition, $oldValues) {
-            $data = $request->validated();
+            $data  = $request->validated();
             $items = $data['items'] ?? null;
             unset($data['items']);
 
@@ -160,7 +165,10 @@ class RequisitionController extends Controller
                 $existingIds = [];
 
                 foreach ($items as $item) {
-                    $item['estimated_total_cost'] = $item['quantity'] * $item['estimated_unit_cost'];
+                    if (empty(trim($item['description'] ?? ''))) {
+                        continue;
+                    }
+                    $item['estimated_total_cost'] = ($item['quantity'] ?? 1) * ($item['estimated_unit_cost'] ?? 0);
 
                     if (!empty($item['id'])) {
                         $reqItem = RequisitionItem::where('id', $item['id'])
@@ -185,7 +193,7 @@ class RequisitionController extends Controller
             }
 
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
 
             AuditLog::record(
                 auth()->id(),
@@ -198,12 +206,14 @@ class RequisitionController extends Controller
 
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
-            ], 'Requisition updated successfully');
+            ], 'Purchase request updated successfully');
         });
     }
 
     /**
      * DELETE /api/v1/procurement/requisitions/{id}
+     *
+     * Soft-cancel — sets status to 'cancelled'. No hard delete.
      */
     public function destroy(string $id): JsonResponse
     {
@@ -211,7 +221,7 @@ class RequisitionController extends Controller
 
         if (in_array($requisition->status, ['approved', 'fulfilled'])) {
             return $this->error(
-                'Cannot delete an approved or fulfilled requisition. Cancel it instead.',
+                'Cannot cancel an approved or fulfilled purchase request.',
                 422
             );
         }
@@ -222,47 +232,48 @@ class RequisitionController extends Controller
 
             AuditLog::record(
                 auth()->id(),
-                'requisition_deleted',
+                'requisition_cancelled',
                 'requisition',
                 $id,
                 $requisitionData,
                 ['status' => 'cancelled']
             );
 
-            return $this->success(null, 'Requisition cancelled successfully');
+            return $this->success(null, 'Purchase request cancelled successfully');
         });
     }
 
     /**
      * POST /api/v1/procurement/requisitions/{id}/submit
      *
-     * Submit a draft/revision requisition for approval.
-     * Auto-generates approval steps based on estimated cost thresholds.
+     * Submits a draft or revision PR for approval.
+     * Creates (or resets) the 3-stage approval chain immediately.
      */
     public function submit(string $id): JsonResponse
     {
-        $requisition = Requisition::with('items')->findOrFail($id);
+        $requisition = Requisition::with(['items', 'approvals'])->findOrFail($id);
 
         if (!in_array($requisition->status, ['draft', 'revision'])) {
-            return $this->error('Only draft or revision requisitions can be submitted for approval.', 422);
+            return $this->error('Only draft or revision purchase requests can be submitted for approval.', 422);
         }
 
         if ($requisition->items()->count() === 0) {
-            return $this->error('Cannot submit a requisition with no items.', 422);
+            return $this->error('Cannot submit a purchase request with no items.', 422);
         }
 
         return DB::transaction(function () use ($requisition) {
             $oldValues = $requisition->toApiArray();
 
             $requisition->update([
-                'status' => 'submitted',
+                'status'       => 'pending_approval',
                 'submitted_by' => auth()->id(),
             ]);
 
-            $requisition->generateApprovalSteps();
+            // Reset (or create) the fixed 3-stage approval chain
+            $requisition->createApprovalChain();
 
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvalSteps']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
 
             AuditLog::record(
                 auth()->id(),
@@ -275,7 +286,7 @@ class RequisitionController extends Controller
 
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
-            ], 'Requisition submitted for approval');
+            ], 'Purchase request submitted for approval');
         });
     }
 
@@ -284,16 +295,14 @@ class RequisitionController extends Controller
      */
     public function approvalStatus(string $id): JsonResponse
     {
-        $requisition = Requisition::with('approvalSteps.actedBy')->findOrFail($id);
+        $requisition = Requisition::with('approvals')->findOrFail($id);
 
         return $this->success([
-            'requisition_id' => $requisition->id,
+            'requisition_id'    => $requisition->id,
             'requisition_number' => $requisition->requisition_number,
-            'status' => $requisition->status,
-            'approval_steps' => $requisition->approvalSteps()
-                ->orderBy('step_order')
-                ->get()
-                ->map->toApiArray(),
+            'current_status'    => $requisition->status,
+            'active_stage'      => $requisition->active_stage,
+            'approval_chain'    => $requisition->approvals->map->toApiArray(true)->toArray(),
         ]);
     }
 }
