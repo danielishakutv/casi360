@@ -8,6 +8,7 @@ use App\Models\ApprovalStep;
 use App\Models\AuditLog;
 use App\Models\PurchaseOrder;
 use App\Models\Requisition;
+use App\Models\RequisitionAuditLog;
 use App\Models\RolePermission;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,7 @@ class ApprovalController extends Controller
             $comments    = $data['comments'] ?? null;
             $now         = now();
             $stageLabel  = $activeApproval->stage_label;
+            $fromStatus  = $requisition->status;
 
             // Snapshot actor details at decision time
             $actorName     = $user->name;
@@ -142,8 +144,19 @@ class ApprovalController extends Controller
                 'requisition_' . $action,
                 'requisition',
                 $requisition->id,
-                ['status' => $requisition->getOriginal('status')],
+                ['status' => $fromStatus],
                 ['status' => $requisition->status, 'stage' => $activeApproval->stage, 'action' => $action]
+            );
+
+            RequisitionAuditLog::write(
+                $requisition->id,
+                $user->id,
+                $user->name,
+                $action,
+                $fromStatus,
+                $requisition->status,
+                $activeApproval->stage,
+                $comments
             );
 
             $messages = [

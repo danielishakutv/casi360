@@ -7,6 +7,7 @@ use App\Http\Requests\Procurement\StoreRequisitionRequest;
 use App\Http\Requests\Procurement\UpdateRequisitionRequest;
 use App\Models\AuditLog;
 use App\Models\Requisition;
+use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -119,6 +120,15 @@ class RequisitionController extends Controller
                 $requisition->toApiArray()
             );
 
+            RequisitionAuditLog::write(
+                $requisition->id,
+                auth()->id(),
+                auth()->user()->name,
+                'created',
+                null,
+                'draft'
+            );
+
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
             ], 'Purchase request created successfully', 201);
@@ -148,8 +158,8 @@ class RequisitionController extends Controller
         $requisition = Requisition::with(['department', 'requestedBy', 'submittedBy', 'items', 'approvals'])
             ->findOrFail($id);
 
-        if (!in_array($requisition->status, ['draft', 'revision'])) {
-            return $this->error('Only draft or revision purchase requests can be edited.', 422);
+        if (!in_array($requisition->status, ['draft', 'revision', 'rejected'])) {
+            return $this->error('Only draft, revision, or rejected purchase requests can be edited.', 422);
         }
 
         $oldValues = $requisition->toApiArray();
@@ -204,6 +214,15 @@ class RequisitionController extends Controller
                 $requisition->toApiArray()
             );
 
+            RequisitionAuditLog::write(
+                $requisition->id,
+                auth()->id(),
+                auth()->user()->name,
+                'updated',
+                $oldValues['status'] ?? null,
+                $requisition->status
+            );
+
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
             ], 'Purchase request updated successfully');
@@ -253,8 +272,8 @@ class RequisitionController extends Controller
     {
         $requisition = Requisition::with(['items', 'approvals'])->findOrFail($id);
 
-        if (!in_array($requisition->status, ['draft', 'revision'])) {
-            return $this->error('Only draft or revision purchase requests can be submitted for approval.', 422);
+        if (!in_array($requisition->status, ['draft', 'revision', 'rejected'])) {
+            return $this->error('Only draft, revision, or rejected purchase requests can be submitted for approval.', 422);
         }
 
         if ($requisition->items()->count() === 0) {
@@ -262,14 +281,14 @@ class RequisitionController extends Controller
         }
 
         return DB::transaction(function () use ($requisition) {
-            $oldValues = $requisition->toApiArray();
+            $fromStatus = $requisition->status;
 
             $requisition->update([
                 'status'       => 'pending_approval',
                 'submitted_by' => auth()->id(),
             ]);
 
-            // Reset (or create) the fixed 3-stage approval chain
+            // Reset (or create) the fixed 3-stage approval chain — always starts at budget_holder
             $requisition->createApprovalChain();
 
             $requisition->refresh();
@@ -280,8 +299,17 @@ class RequisitionController extends Controller
                 'requisition_submitted',
                 'requisition',
                 $requisition->id,
-                $oldValues,
+                ['status' => $fromStatus],
                 $requisition->toApiArray()
+            );
+
+            RequisitionAuditLog::write(
+                $requisition->id,
+                auth()->id(),
+                auth()->user()->name,
+                'submitted',
+                $fromStatus,
+                'pending_approval'
             );
 
             return $this->success([
@@ -298,11 +326,28 @@ class RequisitionController extends Controller
         $requisition = Requisition::with('approvals')->findOrFail($id);
 
         return $this->success([
-            'requisition_id'    => $requisition->id,
+            'requisition_id'     => $requisition->id,
             'requisition_number' => $requisition->requisition_number,
-            'current_status'    => $requisition->status,
-            'active_stage'      => $requisition->active_stage,
-            'approval_chain'    => $requisition->approvals->map->toApiArray(true)->toArray(),
+            'current_status'     => $requisition->status,
+            'active_stage'       => $requisition->active_stage,
+            'approval_chain'     => $requisition->approvals->map->toApiArray(true)->toArray(),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/procurement/requisitions/{id}/audit-log
+     */
+    public function auditLog(string $id): JsonResponse
+    {
+        $requisition = Requisition::findOrFail($id);
+
+        $log = RequisitionAuditLog::where('requisition_id', $requisition->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map->toApiArray();
+
+        return $this->success([
+            'audit_log' => $log,
         ]);
     }
 }

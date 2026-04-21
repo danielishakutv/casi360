@@ -149,7 +149,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::middleware([RoleMiddleware::class . ':super_admin,admin', 'throttle:60,1'])->group(function () {
 
                 Route::post('/register', [RegisterController::class, 'register'])
-                    ->middleware('throttle:' . env('REGISTER_RATE_LIMIT', 3) . ',1')
+                    ->middleware('throttle:' . env('REGISTER_RATE_LIMIT', 10) . ',1')
                     ->name('auth.register');
 
                 // User management
@@ -525,6 +525,9 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
         Route::get('/requisitions/{id}/approval-status', [RequisitionController::class, 'approvalStatus'])
             ->middleware(PermissionMiddleware::class . ':procurement.requisitions.view')
             ->name('procurement.requisitions.approval-status');
+        Route::get('/requisitions/{id}/audit-log', [RequisitionController::class, 'auditLog'])
+            ->middleware(PermissionMiddleware::class . ':procurement.requisitions.view')
+            ->name('procurement.requisitions.audit-log');
         Route::middleware(['throttle:60,1', InvalidateCache::class . ':procurement'])->group(function () {
             Route::post('/requisitions', [RequisitionController::class, 'store'])
                 ->middleware(PermissionMiddleware::class . ':procurement.requisitions.create')
