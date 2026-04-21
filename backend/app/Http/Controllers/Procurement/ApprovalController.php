@@ -179,13 +179,25 @@ class ApprovalController extends Controller
     /**
      * GET /api/v1/procurement/pending-approvals
      *
-     * ?scope=mine  (default) — items awaiting the authenticated user's action
-     * ?scope=all             — all in-flight PRs at any stage
+     * ?scope=mine    (default) — items awaiting the authenticated user's action
+     * ?scope=all               — all in-flight PRs at any stage
+     * ?scope=history           — completed PRs (approved / rejected / revision / fulfilled / cancelled)
+     *                            supports: ?search=, ?page=, ?per_page=
      */
     public function pendingApprovals(Request $request): JsonResponse
     {
         $user  = $request->user();
         $scope = $request->input('scope', 'mine');
+
+        /* ---- History scope — paginated completed PRs ---- */
+        if ($scope === 'history') {
+            $result = $this->getHistoryRequisitions($request);
+            return $this->success([
+                'purchase_orders' => [],
+                'requisitions'    => $result['items'],
+                'meta'            => $result['meta'],
+            ]);
+        }
 
         /* ---- Purchase Orders (legacy ApprovalStep system, unchanged) ---- */
         $allowedStepTypes = $this->getUserApprovalStepTypes($user);
@@ -219,6 +231,61 @@ class ApprovalController extends Controller
     /* ----------------------------------------------------------------
      * Private helpers
      * ---------------------------------------------------------------- */
+
+    /**
+     * Paginated, searchable history of completed requisitions.
+     */
+    private function getHistoryRequisitions(Request $request): array
+    {
+        $perPage = min((int) $request->input('per_page', 15), 100);
+        $search  = $request->input('search', '');
+
+        $query = Requisition::with(['department', 'requestedBy', 'approvals'])
+            ->whereIn('status', ['approved', 'rejected', 'revision', 'fulfilled', 'cancelled']);
+
+        if ($search !== '') {
+            $term = str_replace(['%', '_'], ['\%', '\_'], $search);
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', "%{$term}%")
+                  ->orWhere('requisition_number', 'like', "%{$term}%")
+                  ->orWhere('project_code', 'like', "%{$term}%");
+            });
+        }
+
+        $paginated = $query->orderByDesc('updated_at')->paginate($perPage);
+
+        $items = collect($paginated->items())->map(function ($req) {
+            return [
+                'id'                  => $req->id,
+                'requisition_number'  => $req->requisition_number,
+                'title'               => $req->title,
+                'requested_by_name'   => $req->requestedBy?->name,
+                'department'          => $req->department?->name,
+                'project_code'        => $req->project_code,
+                'donor'               => $req->donor,
+                'estimated_cost'      => (float) $req->estimated_cost,
+                'priority'            => $req->priority,
+                'status'              => $req->status,
+                'needed_by'           => $req->needed_by?->toDateString(),
+                'updated_at'          => $req->updated_at?->toISOString(),
+                'active_stage'        => $req->active_stage,
+                'approval_progress'   => $req->approval_progress,
+                'approval_chain'      => $req->approvals->map->toApiArray(true)->toArray(),
+            ];
+        });
+
+        return [
+            'items' => $items,
+            'meta'  => [
+                'current_page' => $paginated->currentPage(),
+                'last_page'    => $paginated->lastPage(),
+                'per_page'     => $paginated->perPage(),
+                'total'        => $paginated->total(),
+                'from'         => $paginated->firstItem(),
+                'to'           => $paginated->lastItem(),
+            ],
+        ];
+    }
 
     private function getPendingRequisitions($user, string $scope): \Illuminate\Support\Collection
     {
