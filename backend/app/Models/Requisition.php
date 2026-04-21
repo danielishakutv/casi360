@@ -83,7 +83,7 @@ class Requisition extends Model
 
     public function requestedBy()
     {
-        return $this->belongsTo(Employee::class, 'requested_by');
+        return $this->belongsTo(User::class, 'requested_by');
     }
 
     public function submittedBy()

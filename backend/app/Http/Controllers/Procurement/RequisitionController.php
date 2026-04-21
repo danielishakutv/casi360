@@ -90,8 +90,8 @@ class RequisitionController extends Controller
             $items = $data['items'] ?? [];
             unset($data['items']);
 
-            // Always derive requested_by from the authenticated session
-            $data['requested_by']      = auth()->user()->employee?->id ?? $data['requested_by'] ?? null;
+            // Always set requested_by from the authenticated session — never trust client value
+            $data['requested_by']       = auth()->id();
             $data['requisition_number'] = Requisition::generateRequisitionNumber();
             $data['status']            = 'draft';
 

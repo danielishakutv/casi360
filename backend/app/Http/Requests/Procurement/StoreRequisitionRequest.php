@@ -15,7 +15,6 @@ class StoreRequisitionRequest extends FormRequest
     {
         return [
             'department_id' => 'required|uuid|exists:departments,id',
-            'requested_by' => 'required|uuid|exists:employees,id',
             'title' => 'required|string|max:255',
             'justification' => 'nullable|string|max:5000',
             'priority' => 'nullable|in:low,medium,high,urgent',

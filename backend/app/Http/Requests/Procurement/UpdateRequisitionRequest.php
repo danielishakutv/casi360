@@ -15,7 +15,6 @@ class UpdateRequisitionRequest extends FormRequest
     {
         return [
             'department_id' => 'sometimes|uuid|exists:departments,id',
-            'requested_by' => 'sometimes|uuid|exists:employees,id',
             'purchase_order_id' => 'nullable|uuid|exists:purchase_orders,id',
             'title' => 'sometimes|string|max:255',
             'justification' => 'nullable|string|max:5000',
