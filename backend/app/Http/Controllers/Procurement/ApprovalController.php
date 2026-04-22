@@ -10,12 +10,17 @@ use App\Models\PurchaseOrder;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RolePermission;
+use App\Services\Procurement\ApprovalAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ApprovalController extends Controller
 {
+    public function __construct(private ApprovalAuthorizer $authorizer)
+    {
+    }
+
     /* ----------------------------------------------------------------
      * Purchase Order approval  (unchanged — still uses ApprovalStep)
      * ---------------------------------------------------------------- */
@@ -35,7 +40,7 @@ class ApprovalController extends Controller
     }
 
     /* ----------------------------------------------------------------
-     * Requisition approval  (new 3-stage chain)
+     * Requisition approval  (budget_holder -> finance -> procurement)
      * ---------------------------------------------------------------- */
 
     /**
@@ -43,15 +48,17 @@ class ApprovalController extends Controller
      */
     public function processRequisition(ProcessApprovalRequest $request, string $id): JsonResponse
     {
-        $requisition = Requisition::with(['approvals', 'department', 'requestedBy', 'submittedBy', 'items'])
-            ->findOrFail($id);
+        $requisition = Requisition::with([
+            'approvals', 'department', 'requestedBy', 'submittedBy', 'items',
+            'project.projectManager',
+        ])->findOrFail($id);
 
         if (!in_array($requisition->status, ['pending_approval', 'submitted'])) {
             return $this->error('This requisition is not awaiting approval.', 422);
         }
 
-        $user = $request->user();
-        $data = $request->validated();
+        $user   = $request->user();
+        $data   = $request->validated();
         $action = $data['action'];
 
         // Find the currently active (pending) stage
@@ -61,31 +68,25 @@ class ApprovalController extends Controller
             return $this->error('This approval stage is not currently awaiting action.', 422);
         }
 
-        // Enforce stage ownership via permission
-        if ($user->role !== 'super_admin') {
-            $stagePermKey = 'procurement.approvals.' . $activeApproval->stage;
-            $hasPermission = RolePermission::whereHas('permission', function ($q) use ($stagePermKey) {
-                $q->where('key', $stagePermKey);
-            })->where('role', $user->role)->where('allowed', true)->exists();
-
-            if (!$hasPermission) {
-                return $this->error('You are not authorised to approve at the current stage.', 403);
-            }
+        // Enforce stage ownership via the authorizer (project manager / dept+role rules)
+        $auth = $this->authorizer->canActOnStage($user, $requisition, $activeApproval->stage);
+        if (!$auth['allowed']) {
+            return $this->error($auth['reason'] ?? 'You are not authorised to approve at the current stage.', 403);
         }
 
-        // 'forward' is only valid at the finance stage
+        // 'forward' is only meaningful at the finance stage (approve + advance to procurement)
         if ($action === 'forward' && $activeApproval->stage !== 'finance') {
-            return $this->error('Forward to Operations is only available at the Finance stage.', 422);
+            return $this->error('Forward to Procurement is only available at the Finance stage.', 422);
         }
 
         return DB::transaction(function () use ($data, $requisition, $activeApproval, $user) {
-            $action      = $data['action'];
-            $comments    = $data['comments'] ?? null;
-            $now         = now();
-            $stageLabel  = $activeApproval->stage_label;
-            $fromStatus  = $requisition->status;
+            $action     = $data['action'];
+            $comments   = $data['comments'] ?? null;
+            $now        = now();
+            $stageLabel = $activeApproval->stage_label;
+            $fromStatus = $requisition->status;
 
-            // Snapshot actor details at decision time
+            // Snapshot actor details at decision time (so later renames don't alter history)
             $actorName     = $user->name;
             $actorPosition = $user->department ?? null;
 
@@ -105,24 +106,23 @@ class ApprovalController extends Controller
                             ->update(['status' => 'pending', 'updated_at' => $now]);
 
                     } elseif ($activeApproval->stage === 'finance') {
-                        // Finance approves final — skip operations
+                        // Finance approves -> advances to Procurement (final stage)
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
-                        $requisition->approvals()->where('stage', 'operations')
-                            ->update(['status' => 'skipped', 'updated_at' => $now]);
-                        $requisition->update(['status' => 'approved']);
+                        $requisition->approvals()->where('stage', 'procurement')
+                            ->update(['status' => 'pending', 'updated_at' => $now]);
 
-                    } elseif ($activeApproval->stage === 'operations') {
+                    } elseif ($activeApproval->stage === 'procurement') {
+                        // Procurement is the final stage -> PR fully approved
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                         $requisition->update(['status' => 'approved']);
                     }
                     break;
 
                 case 'forward':
-                    // Finance forwards to Operations (does not close the chain)
-                    $activeApproval->update(array_merge($actorData, ['status' => 'forwarded']));
-                    $requisition->approvals()->where('stage', 'operations')
+                    // Finance forwards -> marked as APPROVED by Finance and chain advances
+                    $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
+                    $requisition->approvals()->where('stage', 'procurement')
                         ->update(['status' => 'pending', 'updated_at' => $now]);
-                    // Requisition status remains 'pending_approval'
                     break;
 
                 case 'reject':
@@ -137,7 +137,7 @@ class ApprovalController extends Controller
             }
 
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);
 
             AuditLog::record(
                 $user->id,
@@ -161,7 +161,7 @@ class ApprovalController extends Controller
 
             $messages = [
                 'approve'  => "Purchase request approved by {$stageLabel}",
-                'forward'  => "Purchase request forwarded to Operations by Finance",
+                'forward'  => "Purchase request approved by Finance and forwarded to Procurement",
                 'reject'   => "Purchase request rejected by {$stageLabel}",
                 'revision' => "Purchase request sent for revision by {$stageLabel}",
             ];
@@ -179,7 +179,7 @@ class ApprovalController extends Controller
     /**
      * GET /api/v1/procurement/pending-approvals
      *
-     * ?scope=mine    (default) — items awaiting the authenticated user's action
+     * ?scope=mine    (default) — items the authenticated user can actually act on
      * ?scope=all               — all in-flight PRs at any stage
      * ?scope=history           — completed PRs (approved / rejected / revision / fulfilled / cancelled)
      *                            supports: ?search=, ?page=, ?per_page=
@@ -219,7 +219,7 @@ class ApprovalController extends Controller
             }
         }
 
-        /* ---- Requisitions (new requisition_approvals system) ---- */
+        /* ---- Requisitions (authorizer-driven filtering) ---- */
         $requisitions = $this->getPendingRequisitions($user, $scope);
 
         return $this->success([
@@ -240,7 +240,7 @@ class ApprovalController extends Controller
         $perPage = min((int) $request->input('per_page', 15), 100);
         $search  = $request->input('search', '');
 
-        $query = Requisition::with(['department', 'requestedBy', 'approvals'])
+        $query = Requisition::with(['department', 'requestedBy', 'approvals', 'project'])
             ->whereIn('status', ['approved', 'rejected', 'revision', 'fulfilled', 'cancelled']);
 
         if ($search !== '') {
@@ -261,7 +261,9 @@ class ApprovalController extends Controller
                 'title'               => $req->title,
                 'requested_by_name'   => $req->requestedBy?->name,
                 'department'          => $req->department?->name,
+                'project_id'          => $req->project_id,
                 'project_code'        => $req->project_code,
+                'project_name'        => $req->project?->name,
                 'donor'               => $req->donor,
                 'estimated_cost'      => (float) $req->estimated_cost,
                 'priority'            => $req->priority,
@@ -287,77 +289,71 @@ class ApprovalController extends Controller
         ];
     }
 
+    /**
+     * Pending requisitions for the dashboard, filtered via the authorizer.
+     * 'all' scope returns every in-flight PR regardless of who can act on it.
+     * 'mine' scope (default) returns only PRs the user can act on RIGHT NOW
+     * at the currently pending stage.
+     */
     private function getPendingRequisitions($user, string $scope): \Illuminate\Support\Collection
     {
-        $query = Requisition::with(['department', 'requestedBy', 'approvals'])
-            ->whereIn('status', ['pending_approval', 'submitted']);
+        $query = Requisition::with([
+            'department', 'requestedBy', 'approvals', 'project.projectManager',
+        ])->whereIn('status', ['pending_approval', 'submitted']);
 
-        if ($scope !== 'all') {
-            // Only show PRs where a stage matching the user's permission is pending
-            $userStages = $this->getUserApprovalStages($user);
-
-            if (empty($userStages)) {
-                return collect();
-            }
-
-            $query->whereHas('approvals', function ($q) use ($userStages) {
-                $q->where('status', 'pending')->whereIn('stage', $userStages);
-            });
+        if ($scope === 'all') {
+            return $query->orderByDesc('updated_at')->get()->map(fn ($req) => $this->toPendingArray($req));
         }
 
-        return $query->orderByDesc('updated_at')->get()->map(function ($req) {
-            return [
-                'id'                  => $req->id,
-                'requisition_number'  => $req->requisition_number,
-                'title'               => $req->title,
-                'requested_by_name'   => $req->requestedBy?->name,
-                'department'          => $req->department?->name,
-                'project_code'        => $req->project_code,
-                'donor'               => $req->donor,
-                'estimated_cost'      => (float) $req->estimated_cost,
-                'priority'            => $req->priority,
-                'status'              => $req->status,
-                'needed_by'           => $req->needed_by?->toDateString(),
-                'submitted_at'        => $req->updated_at?->toISOString(),
-                'active_stage'        => $req->active_stage,
-                'approval_progress'   => $req->approval_progress,
-                'approval_chain'      => $req->approvals->map->toApiArray(false)->toArray(),
-            ];
+        // 'mine' — narrow by stages the user is potentially eligible for, then
+        // for each PR verify they can actually act on its current pending stage.
+        $eligibleStages = $this->authorizer->eligibleStagesFor($user);
+
+        if (empty($eligibleStages)) {
+            return collect();
+        }
+
+        $query->whereHas('approvals', function ($q) use ($eligibleStages) {
+            $q->where('status', 'pending')->whereIn('stage', $eligibleStages);
         });
+
+        return $query->orderByDesc('updated_at')->get()
+            ->filter(function ($req) use ($user) {
+                $active = $req->approvals->firstWhere('status', 'pending');
+                if (!$active) {
+                    return false;
+                }
+                return $this->authorizer->canActOnStage($user, $req, $active->stage)['allowed'];
+            })
+            ->map(fn ($req) => $this->toPendingArray($req))
+            ->values();
     }
 
-    /**
-     * Stages the authenticated user is allowed to act on (new permission keys).
-     */
-    private function getUserApprovalStages($user): array
+    private function toPendingArray(Requisition $req): array
     {
-        if ($user->role === 'super_admin') {
-            return ['budget_holder', 'finance', 'operations'];
-        }
-
-        $stageMap = [
-            'procurement.approvals.budget_holder' => 'budget_holder',
-            'procurement.approvals.finance'       => 'finance',
-            'procurement.approvals.operations'    => 'operations',
+        return [
+            'id'                  => $req->id,
+            'requisition_number'  => $req->requisition_number,
+            'title'               => $req->title,
+            'requested_by_name'   => $req->requestedBy?->name,
+            'department'          => $req->department?->name,
+            'project_id'          => $req->project_id,
+            'project_code'        => $req->project_code,
+            'project_name'        => $req->project?->name,
+            'donor'               => $req->donor,
+            'estimated_cost'      => (float) $req->estimated_cost,
+            'priority'            => $req->priority,
+            'status'              => $req->status,
+            'needed_by'           => $req->needed_by?->toDateString(),
+            'submitted_at'        => $req->updated_at?->toISOString(),
+            'active_stage'        => $req->active_stage,
+            'approval_progress'   => $req->approval_progress,
+            'approval_chain'      => $req->approvals->map->toApiArray(false)->toArray(),
         ];
-
-        $allowed = RolePermission::whereHas('permission', function ($q) {
-            $q->where('key', 'like', 'procurement.approvals.%')
-              ->whereNotIn('key', ['procurement.approvals.view']);
-        })->where('role', $user->role)
-          ->where('allowed', true)
-          ->with('permission')
-          ->get()
-          ->pluck('permission.key')
-          ->toArray();
-
-        return array_values(array_filter(
-            array_map(fn($key) => $stageMap[$key] ?? null, $allowed)
-        ));
     }
 
     /**
-     * Step types for legacy PO approvals (old permission keys).
+     * Step types for legacy PO approvals (old permission keys, untouched).
      */
     private function getUserApprovalStepTypes($user): array
     {
@@ -366,8 +362,8 @@ class ApprovalController extends Controller
         }
 
         $mapping = [
-            'procurement.approval.manager_review'   => 'manager_review',
-            'procurement.approval.finance_check'    => 'finance_check',
+            'procurement.approval.manager_review'      => 'manager_review',
+            'procurement.approval.finance_check'       => 'finance_check',
             'procurement.approval.operations_approval' => 'operations_approval',
             'procurement.approval.executive_approval'  => 'executive_approval',
         ];

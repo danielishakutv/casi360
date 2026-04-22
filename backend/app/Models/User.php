@@ -95,6 +95,16 @@ class User extends Authenticatable
         return $this->hasMany(LoginHistory::class);
     }
 
+    /**
+     * Employee record linked by email (users and employees share email as the
+     * bridge since there is no FK). Used by approval authorisation to resolve
+     * whether the authenticated user is a project manager.
+     */
+    public function employee()
+    {
+        return $this->hasOne(Employee::class, 'email', 'email');
+    }
+
     /* ----------------------------------------------------------------
      * Helpers
      * ---------------------------------------------------------------- */

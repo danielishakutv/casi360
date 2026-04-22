@@ -6,14 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Procurement\StoreRfqRequest;
 use App\Http\Requests\Procurement\UpdateRfqRequest;
 use App\Models\AuditLog;
+use App\Models\Requisition;
 use App\Models\Rfq;
 use App\Models\RfqItem;
+use App\Services\Procurement\ApprovalAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RfqController extends Controller
 {
+    public function __construct(private ApprovalAuthorizer $authorizer)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/rfq
      */
@@ -70,6 +76,29 @@ class RfqController extends Controller
      */
     public function store(StoreRfqRequest $request): JsonResponse
     {
+        // Only Procurement managers (or admins) may raise RFQs
+        if (!$this->authorizer->canManageRfqs($request->user())) {
+            return $this->error(
+                'Only a manager in the Procurement department (or an administrator) can create a Request for Quotation.',
+                403
+            );
+        }
+
+        // If linked to a Purchase Request, it must be fully approved
+        $prRef = $request->input('pr_reference');
+        if ($prRef) {
+            $pr = Requisition::where('requisition_number', $prRef)->first();
+            if (!$pr) {
+                return $this->error("No purchase request found with number {$prRef}.", 422);
+            }
+            if ($pr->status !== 'approved') {
+                return $this->error(
+                    "Purchase request {$prRef} is not yet approved (current status: {$pr->status}). RFQs can only be created from approved purchase requests.",
+                    422
+                );
+            }
+        }
+
         return DB::transaction(function () use ($request) {
             $data = $request->validated();
             $items = $data['items'] ?? [];

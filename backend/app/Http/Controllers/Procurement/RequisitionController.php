@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Procurement\StoreRequisitionRequest;
 use App\Http\Requests\Procurement\UpdateRequisitionRequest;
 use App\Models\AuditLog;
+use App\Models\Project;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
@@ -20,7 +21,7 @@ class RequisitionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Requisition::with(['department', 'requestedBy', 'submittedBy', 'purchaseOrder', 'approvals']);
+        $query = Requisition::with(['department', 'requestedBy', 'submittedBy', 'purchaseOrder', 'project', 'approvals']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -96,6 +97,14 @@ class RequisitionController extends Controller
             $data['requisition_number'] = Requisition::generateRequisitionNumber();
             $data['status']            = 'draft';
 
+            // If a project is linked, sync project_code from the canonical source
+            if (!empty($data['project_id'])) {
+                $project = Project::find($data['project_id']);
+                if ($project) {
+                    $data['project_code'] = $project->project_code;
+                }
+            }
+
             $requisition = Requisition::create($data);
 
             foreach ($items as $item) {
@@ -109,7 +118,7 @@ class RequisitionController extends Controller
 
             $requisition->recalculateEstimatedCost();
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);
 
             AuditLog::record(
                 auth()->id(),
@@ -141,7 +150,7 @@ class RequisitionController extends Controller
     public function show(string $id): JsonResponse
     {
         $requisition = Requisition::with([
-            'department', 'requestedBy', 'submittedBy', 'purchaseOrder',
+            'department', 'requestedBy', 'submittedBy', 'purchaseOrder', 'project.projectManager',
             'items.inventoryItem', 'approvals',
         ])->findOrFail($id);
 
@@ -155,7 +164,7 @@ class RequisitionController extends Controller
      */
     public function update(UpdateRequisitionRequest $request, string $id): JsonResponse
     {
-        $requisition = Requisition::with(['department', 'requestedBy', 'submittedBy', 'items', 'approvals'])
+        $requisition = Requisition::with(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project'])
             ->findOrFail($id);
 
         if (!in_array($requisition->status, ['draft', 'revision', 'rejected'])) {
@@ -168,6 +177,18 @@ class RequisitionController extends Controller
             $data  = $request->validated();
             $items = $data['items'] ?? null;
             unset($data['items']);
+
+            // Keep project_code in sync with the selected project
+            if (array_key_exists('project_id', $data)) {
+                if (!empty($data['project_id'])) {
+                    $project = Project::find($data['project_id']);
+                    if ($project) {
+                        $data['project_code'] = $project->project_code;
+                    }
+                } else {
+                    $data['project_code'] = null;
+                }
+            }
 
             $requisition->update($data);
 
@@ -203,7 +224,7 @@ class RequisitionController extends Controller
             }
 
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);
 
             AuditLog::record(
                 auth()->id(),
@@ -292,7 +313,7 @@ class RequisitionController extends Controller
             $requisition->createApprovalChain();
 
             $requisition->refresh();
-            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals']);
+            $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);
 
             AuditLog::record(
                 auth()->id(),

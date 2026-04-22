@@ -16,6 +16,7 @@ class StoreRequisitionRequest extends FormRequest
         return [
             'department_id' => 'required|uuid|exists:departments,id',
             'title' => 'required|string|max:255',
+            'date' => 'nullable|date',
             'justification' => 'nullable|string|max:5000',
             'priority' => 'nullable|in:low,medium,high,urgent',
             'needed_by' => 'nullable|date|after_or_equal:today',
@@ -24,6 +25,7 @@ class StoreRequisitionRequest extends FormRequest
             'purchase_scenario' => 'nullable|string|max:255',
             'logistics_involved' => 'nullable|boolean',
             'boq' => 'nullable|boolean',
+            'project_id' => 'nullable|uuid|exists:projects,id',
             'project_code' => 'nullable|string|max:100',
             'donor' => 'nullable|string|max:255',
             'currency' => 'nullable|string|max:10',

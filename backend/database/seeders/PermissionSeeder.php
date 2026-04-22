@@ -102,10 +102,13 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'approval', 'action' => 'self_approve', 'description' => 'Allow approving own submissions (overrides self-approval block)'],
 
             // --- Procurement: Purchase Request Approval Workflow (3-stage fixed chain) ---
+            // Stage eligibility is further narrowed at runtime by project-manager linkage and
+            // by department membership (Finance / Procurement managers). These keys act as
+            // feature entitlements — administrators can revoke them per role if needed.
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'view',         'description' => 'View the Approvals page and pending purchase requests'],
-            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'budget_holder', 'description' => 'Act as Budget Holder — Stage 1 PR approval'],
-            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'finance',       'description' => 'Act as Finance approver — Stage 2 PR approval (approve final or forward)'],
-            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'operations',    'description' => 'Act as Operations approver — Stage 3 PR approval (only when forwarded by Finance)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'budget_holder', 'description' => 'Act as Budget Holder — Stage 1 PR approval (project manager of the linked project)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'finance',       'description' => 'Act as Finance approver — Stage 2 PR approval (Finance department manager)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'procurement',   'description' => 'Act as Procurement Manager — Stage 3 PR approval (Procurement department manager, final stage)'],
 
             // --- Procurement: Disbursements ---
             ['module' => 'procurement', 'feature' => 'disbursements', 'action' => 'view', 'description' => 'View disbursement records'],
@@ -279,7 +282,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.view'         => true,
                 'procurement.approvals.budget_holder' => true,
                 'procurement.approvals.finance'       => true,
-                'procurement.approvals.operations'    => true,
+                'procurement.approvals.procurement'   => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => true,
                 'procurement.vendor_categories.view' => true,
@@ -402,9 +405,13 @@ class PermissionSeeder extends Seeder
                 'procurement.approval.executive_approval' => false,
                 'procurement.approval.self_approve' => false,
                 'procurement.approvals.view'         => true,
+                // Managers get all three stage permissions by default; the runtime
+                // authorizer narrows further — only the project manager of the linked
+                // project may act as Budget Holder, only Finance-dept managers at the
+                // Finance stage, only Procurement-dept managers at the Procurement stage.
                 'procurement.approvals.budget_holder' => true,
-                'procurement.approvals.finance'       => false,
-                'procurement.approvals.operations'    => false,
+                'procurement.approvals.finance'       => true,
+                'procurement.approvals.procurement'   => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,
@@ -529,7 +536,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.view'         => true,
                 'procurement.approvals.budget_holder' => false,
                 'procurement.approvals.finance'       => false,
-                'procurement.approvals.operations'    => false,
+                'procurement.approvals.procurement'   => false,
                 'procurement.disbursements.view' => false,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,

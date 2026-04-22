@@ -12,11 +12,24 @@ class Department extends Model
 
     protected $fillable = [
         'name',
+        'code',
         'head',
         'description',
         'color',
         'status',
     ];
+
+    /**
+     * Boot: normalise `code` to uppercase whenever it's set.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Department $department) {
+            if (!empty($department->code)) {
+                $department->code = strtoupper(trim($department->code));
+            }
+        });
+    }
 
     /* ----------------------------------------------------------------
      * Scopes
@@ -59,6 +72,7 @@ class Department extends Model
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'code' => $this->code,
             'head' => $this->head,
             'employee_count' => $this->employee_count,
             'description' => $this->description,

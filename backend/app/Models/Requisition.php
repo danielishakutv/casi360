@@ -16,6 +16,7 @@ class Requisition extends Model
         'requested_by',
         'submitted_by',
         'purchase_order_id',
+        'project_id',
         'title',
         'date',
         'justification',
@@ -96,12 +97,17 @@ class Requisition extends Model
         return $this->belongsTo(PurchaseOrder::class);
     }
 
+    public function project()
+    {
+        return $this->belongsTo(Project::class);
+    }
+
     public function items()
     {
         return $this->hasMany(RequisitionItem::class);
     }
 
-    /** New 3-stage approval chain (budget_holder → finance → operations). */
+    /** New 3-stage approval chain (budget_holder → finance → procurement). */
     public function approvals()
     {
         return $this->hasMany(RequisitionApproval::class)->orderBy('stage_order');
@@ -213,9 +219,9 @@ class Requisition extends Model
                 'status'      => 'waiting',
             ],
             [
-                'stage'       => 'operations',
+                'stage'       => 'procurement',
                 'stage_order' => 3,
-                'stage_label' => 'Operations',
+                'stage_label' => 'Procurement',
                 'status'      => 'waiting',
             ],
         ]);
@@ -269,6 +275,9 @@ class Requisition extends Model
             'submitted_by_name'     => $this->submittedBy?->name,
             'purchase_order_id'     => $this->purchase_order_id,
             'purchase_order_number' => $this->purchaseOrder?->po_number,
+            'project_id'            => $this->project_id,
+            'project_name'          => $this->project?->name,
+            'project_manager_id'    => $this->project?->project_manager_id,
             'justification'         => $this->justification,
             'priority'              => $this->priority,
             'needed_by'             => $this->needed_by?->toDateString(),
