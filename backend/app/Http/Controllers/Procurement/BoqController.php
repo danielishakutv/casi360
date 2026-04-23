@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Procurement\ProcessBoqApprovalRequest;
 use App\Http\Requests\Procurement\StoreBoqRequest;
 use App\Http\Requests\Procurement\UpdateBoqRequest;
 use App\Models\AuditLog;
 use App\Models\Boq;
+use App\Models\BoqAuditLog;
 use App\Models\BoqItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -90,13 +92,20 @@ class BoqController extends Controller
             $boq->refresh();
             $boq->load('items');
 
+            $actor = auth()->user();
             AuditLog::record(
-                auth()->id(),
+                $actor?->id,
                 'boq_created',
                 'boq',
                 $boq->id,
                 null,
                 $boq->toApiArray()
+            );
+            BoqAuditLog::write(
+                $boq->id,
+                $actor?->id,
+                $actor?->name ?? 'System',
+                'created'
             );
 
             return $this->success([
@@ -166,13 +175,20 @@ class BoqController extends Controller
             $boq->refresh();
             $boq->load('items');
 
+            $actor = auth()->user();
             AuditLog::record(
-                auth()->id(),
+                $actor?->id,
                 'boq_updated',
                 'boq',
                 $boq->id,
                 $oldValues,
                 $boq->toApiArray()
+            );
+            BoqAuditLog::write(
+                $boq->id,
+                $actor?->id,
+                $actor?->name ?? 'System',
+                'updated'
             );
 
             return $this->success([
@@ -208,5 +224,143 @@ class BoqController extends Controller
 
             return $this->success(null, 'BOQ deleted successfully');
         });
+    }
+
+    /**
+     * POST /api/v1/procurement/boq/{id}/submit
+     *
+     * Move a BOQ from draft|revised → submitted so Procurement can act on it.
+     * The route middleware already enforces procurement.boq.edit, so owners
+     * and permitted editors are the only ones who reach this method.
+     */
+    public function submit(string $id): JsonResponse
+    {
+        $boq = Boq::findOrFail($id);
+
+        if (!in_array($boq->status, ['draft', 'revised'], true)) {
+            return $this->error('Only BOQs in draft or revised status can be submitted.', 422);
+        }
+
+        return DB::transaction(function () use ($boq) {
+            $fromStatus = $boq->status;
+            $boq->update(['status' => 'submitted']);
+
+            $actor = auth()->user();
+            BoqAuditLog::write(
+                $boq->id,
+                $actor?->id,
+                $actor?->name ?? 'System',
+                'submitted'
+            );
+            AuditLog::record(
+                $actor?->id,
+                'boq_submitted',
+                'boq',
+                $boq->id,
+                ['status' => $fromStatus],
+                ['status' => 'submitted']
+            );
+
+            $boq->refresh();
+            $boq->load('items');
+
+            return $this->success([
+                'boq' => $boq->toDetailArray(),
+            ], 'BOQ submitted for approval.');
+        });
+    }
+
+    /**
+     * PATCH /api/v1/procurement/boq/{id}/approval
+     *
+     * Route middleware enforces procurement.boq.approve. We still check the
+     * status precondition so only submitted BOQs can be acted on.
+     *
+     * Actions:
+     *   - approve  → status = approved
+     *   - revision → status = revised (comments required)
+     *   - reject   → status = rejected (comments required)
+     */
+    public function approval(ProcessBoqApprovalRequest $request, string $id): JsonResponse
+    {
+        $boq = Boq::findOrFail($id);
+
+        if ($boq->status !== 'submitted') {
+            return $this->error('Only submitted BOQs can be approved, revised, or rejected.', 422);
+        }
+
+        $validated = $request->validated();
+        $action    = $validated['action'];
+        $comments  = $validated['comments'] ?? null;
+
+        $nextStatus = match ($action) {
+            'approve'  => 'approved',
+            'revision' => 'revised',
+            'reject'   => 'rejected',
+        };
+
+        // Normalise verb → past-tense audit action so the timeline reads
+        // "approved / revision / rejected" (matches the spec exactly).
+        $auditAction = match ($action) {
+            'approve'  => 'approved',
+            'revision' => 'revision',
+            'reject'   => 'rejected',
+        };
+
+        return DB::transaction(function () use ($boq, $action, $auditAction, $comments, $nextStatus) {
+            $fromStatus = $boq->status;
+            $boq->update(['status' => $nextStatus]);
+
+            $actor = auth()->user();
+            BoqAuditLog::write(
+                $boq->id,
+                $actor?->id,
+                $actor?->name ?? 'System',
+                $auditAction,
+                $comments
+            );
+            AuditLog::record(
+                $actor?->id,
+                "boq_{$action}",
+                'boq',
+                $boq->id,
+                ['status' => $fromStatus],
+                ['status' => $nextStatus, 'comments' => $comments]
+            );
+
+            $boq->refresh();
+            $boq->load('items');
+
+            $message = match ($action) {
+                'approve'  => 'BOQ approved successfully.',
+                'revision' => 'BOQ sent back for revision.',
+                'reject'   => 'BOQ rejected.',
+            };
+
+            return $this->success([
+                'boq' => $boq->toDetailArray(),
+            ], $message);
+        });
+    }
+
+    /**
+     * GET /api/v1/procurement/boq/{id}/audit-log
+     *
+     * Ordered oldest-first so the UI can play the trail as a timeline.
+     */
+    public function auditLog(string $id): JsonResponse
+    {
+        // findOrFail confirms the BOQ exists and the viewer has view permission
+        // (enforced at the route level before reaching here).
+        Boq::findOrFail($id);
+
+        $entries = BoqAuditLog::where('boq_id', $id)
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        return $this->success([
+            'audit_log' => $entries->map->toApiArray()->values(),
+        ]);
     }
 }

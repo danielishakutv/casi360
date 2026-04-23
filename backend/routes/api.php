@@ -438,6 +438,11 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
     |   PATCH  /api/v1/procurement/requisitions/{id}/approval           - Approve/reject current step
     |   GET    /api/v1/procurement/requisitions/{id}/approval-status    - Approval steps status
     |
+    | BOQ:
+    |   POST   /api/v1/procurement/boq/{id}/submit                      - Submit BOQ for approval
+    |   PATCH  /api/v1/procurement/boq/{id}/approval                    - Approve/revise/reject BOQ
+    |   GET    /api/v1/procurement/boq/{id}/audit-log                   - BOQ state-transition trail
+    |
     | Cross-cutting:
     |   GET    /api/v1/procurement/pending-approvals                    - Items pending user's approval
     |
@@ -580,6 +585,9 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
         Route::get('/boq/{id}', [BoqController::class, 'show'])
             ->middleware(PermissionMiddleware::class . ':procurement.boq.view')
             ->name('procurement.boq.show');
+        Route::get('/boq/{id}/audit-log', [BoqController::class, 'auditLog'])
+            ->middleware(PermissionMiddleware::class . ':procurement.boq.view')
+            ->name('procurement.boq.audit-log');
         Route::middleware(['throttle:60,1', InvalidateCache::class . ':procurement'])->group(function () {
             Route::post('/boq', [BoqController::class, 'store'])
                 ->middleware(PermissionMiddleware::class . ':procurement.boq.create')
@@ -590,6 +598,12 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::delete('/boq/{id}', [BoqController::class, 'destroy'])
                 ->middleware(PermissionMiddleware::class . ':procurement.boq.delete')
                 ->name('procurement.boq.destroy');
+            Route::post('/boq/{id}/submit', [BoqController::class, 'submit'])
+                ->middleware(PermissionMiddleware::class . ':procurement.boq.edit')
+                ->name('procurement.boq.submit');
+            Route::patch('/boq/{id}/approval', [BoqController::class, 'approval'])
+                ->middleware(PermissionMiddleware::class . ':procurement.boq.approve')
+                ->name('procurement.boq.approval');
         });
 
         // --- RFQ (Request for Quotation) ---

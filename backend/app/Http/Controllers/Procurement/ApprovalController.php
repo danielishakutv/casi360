@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Procurement\ProcessApprovalRequest;
 use App\Models\ApprovalStep;
 use App\Models\AuditLog;
+use App\Models\Boq;
 use App\Models\PurchaseOrder;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
@@ -195,6 +196,7 @@ class ApprovalController extends Controller
             return $this->success([
                 'purchase_orders' => [],
                 'requisitions'    => $result['items'],
+                'boqs'            => [],
                 'meta'            => $result['meta'],
             ]);
         }
@@ -222,9 +224,13 @@ class ApprovalController extends Controller
         /* ---- Requisitions (authorizer-driven filtering) ---- */
         $requisitions = $this->getPendingRequisitions($user, $scope);
 
+        /* ---- BOQs (submitted + user has procurement.boq.approve) ---- */
+        $boqs = $this->getPendingBoqs($user, $scope);
+
         return $this->success([
             'purchase_orders' => $purchaseOrders,
             'requisitions'    => $requisitions,
+            'boqs'            => $boqs,
         ]);
     }
 
@@ -350,6 +356,60 @@ class ApprovalController extends Controller
             'approval_progress'   => $req->approval_progress,
             'approval_chain'      => $req->approvals->map->toApiArray(false)->toArray(),
         ];
+    }
+
+    /**
+     * BOQs awaiting procurement approval, filtered for the caller.
+     *
+     * Filter rule per spec: status = submitted AND caller has
+     * procurement.boq.approve (super_admin bypasses). 'all' scope returns
+     * every submitted BOQ regardless of the caller's permission.
+     */
+    private function getPendingBoqs($user, string $scope): \Illuminate\Support\Collection
+    {
+        if ($scope !== 'all' && !$this->userHasPermission($user, 'procurement.boq.approve')) {
+            return collect();
+        }
+
+        return Boq::where('status', 'submitted')
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(fn (Boq $boq) => $this->toPendingBoqArray($boq))
+            ->values();
+    }
+
+    private function toPendingBoqArray(Boq $boq): array
+    {
+        return [
+            'id'                => $boq->id,
+            'boq_number'        => $boq->boq_number,
+            'title'             => $boq->title,
+            'pr_reference'      => $boq->pr_reference,
+            'project_code'      => $boq->project_code,
+            'department'        => $boq->department,
+            'category'          => $boq->category,
+            'delivery_location' => $boq->delivery_location,
+            'prepared_by'       => $boq->prepared_by,
+            'status'            => $boq->status,
+            'grand_total'       => (float) $boq->items()->sum('total'),
+            'item_count'        => $boq->items()->count(),
+            'submitted_at'      => $boq->updated_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * True when the user (or super_admin) holds the given permission key.
+     */
+    private function userHasPermission($user, string $key): bool
+    {
+        if ($user->role === 'super_admin') {
+            return true;
+        }
+
+        return RolePermission::where('role', $user->role)
+            ->whereHas('permission', fn ($q) => $q->where('key', $key))
+            ->where('allowed', true)
+            ->exists();
     }
 
     /**

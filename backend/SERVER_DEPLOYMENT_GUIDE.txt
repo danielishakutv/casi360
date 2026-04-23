@@ -271,4 +271,45 @@ cd /home/api.casi360.com
 git fetch origin main
 git --work-tree=/home/api.casi360.com/_deploy_tmp checkout origin/main -- backend/
 cp -rf /home/api.casi360.com/_deploy_tmp/backend/app/* /home/api.casi360.com/app/
+php artisan migrate
 php artisan optimize:clear
+
+
+cd /home/api.casi360.com
+git fetch origin main
+git --work-tree=/home/api.casi360.com/_deploy_tmp checkout origin/main -- backend/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/app/* /home/api.casi360.com/app/
+cp -rf /home/api.casi360.com/_deploy_tmp/backend/database/* /home/api.casi360.com/database/
+php artisan migrate
+php artisan optimize:clear
+
+
+
+
+____________________________________________________________
+QUICK DEPLOY AFTER CHANGE OF CODE IN FRONTEND
+------------------------------------------------------------
+
+# 1. Strip UTF-8 BOM from ALL PHP files (safe — does nothing to files without BOM)
+find /home/api.casi360.com/app -name "*.php" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+find /home/api.casi360.com/bootstrap -name "*.php" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+find /home/api.casi360.com/config -name "*.php" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+find /home/api.casi360.com/routes -name "*.php" -exec sed -i '1s/^\xEF\xBB\xBF//' {} \;
+
+# 2. Verify BOM is gone from the two known problem files
+hexdump -C /home/api.casi360.com/app/Http/Controllers/Procurement/PurchaseOrderController.php | head -1
+hexdump -C /home/api.casi360.com/app/Http/Controllers/Procurement/RequisitionController.php | head -1
+# Should start with "3c 3f 70 68 70" (<?php), NOT "ef bb bf"
+
+# 3. Ensure FRONTEND_URL is in .env
+grep FRONTEND_URL /home/api.casi360.com/.env || echo 'FRONTEND_URL=https://casi360.com' >> /home/api.casi360.com/.env
+
+# 4. Clear all Laravel caches
+cd /home/api.casi360.com && php artisan optimize:clear && php artisan optimize
+
+# 5. Verify routes compile
+php artisan route:list --path=procurement | head -20
+
+# 6. Test a procurement endpoint directly on the server
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/v1/procurement/requisitions
+# Should return 401 (unauthenticated), NOT 500

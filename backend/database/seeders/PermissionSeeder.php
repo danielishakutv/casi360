@@ -125,6 +125,7 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'boq', 'action' => 'create', 'description' => 'Create bills of quantities'],
             ['module' => 'procurement', 'feature' => 'boq', 'action' => 'edit', 'description' => 'Edit bills of quantities'],
             ['module' => 'procurement', 'feature' => 'boq', 'action' => 'delete', 'description' => 'Delete bills of quantities'],
+            ['module' => 'procurement', 'feature' => 'boq', 'action' => 'approve', 'description' => 'Approve, request revision, or reject bills of quantities'],
 
             // --- Procurement: RFQ ---
             ['module' => 'procurement', 'feature' => 'rfq', 'action' => 'view', 'description' => 'View requests for quotation'],
@@ -293,6 +294,7 @@ class PermissionSeeder extends Seeder
                 'procurement.boq.create' => true,
                 'procurement.boq.edit' => true,
                 'procurement.boq.delete' => true,
+                'procurement.boq.approve' => true,
                 'procurement.rfq.view' => true,
                 'procurement.rfq.create' => true,
                 'procurement.rfq.edit' => true,
@@ -422,6 +424,7 @@ class PermissionSeeder extends Seeder
                 'procurement.boq.create' => true,
                 'procurement.boq.edit' => true,
                 'procurement.boq.delete' => false,
+                'procurement.boq.approve' => false,
                 'procurement.rfq.view' => true,
                 'procurement.rfq.create' => true,
                 'procurement.rfq.edit' => true,
@@ -547,6 +550,7 @@ class PermissionSeeder extends Seeder
                 'procurement.boq.create' => false,
                 'procurement.boq.edit' => false,
                 'procurement.boq.delete' => false,
+                'procurement.boq.approve' => false,
                 'procurement.rfq.view' => true,
                 'procurement.rfq.create' => false,
                 'procurement.rfq.edit' => false,
