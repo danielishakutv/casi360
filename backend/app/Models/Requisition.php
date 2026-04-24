@@ -113,6 +113,11 @@ class Requisition extends Model
         return $this->hasMany(RequisitionApproval::class)->orderBy('stage_order');
     }
 
+    public function auditLogs()
+    {
+        return $this->hasMany(RequisitionAuditLog::class);
+    }
+
     /**
      * Legacy polymorphic steps — kept for PO compatibility; NOT used for
      * requisition approvals any more.

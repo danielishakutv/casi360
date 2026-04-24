@@ -50,6 +50,14 @@ class RequisitionController extends Controller
             });
         }
 
+        if ($request->filled('stage') && $request->filled('stage_action')) {
+            $stageActions = explode(',', $request->input('stage_action'));
+            $query->whereHas('auditLogs', function ($q) use ($request, $stageActions) {
+                $q->where('stage', $request->input('stage'))
+                  ->whereIn('action', $stageActions);
+            });
+        }
+
         $sortBy  = $request->input('sort_by', 'created_at');
         $sortDir = $request->input('sort_dir', 'desc');
         $allowedSorts = ['requisition_number', 'title', 'priority', 'estimated_cost', 'status', 'needed_by', 'created_at'];

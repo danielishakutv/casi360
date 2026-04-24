@@ -989,6 +989,19 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 ->name('reports.finance.overview');
         });
 
+        // --- Finance Dashboard ---
+        Route::prefix('finance')->group(function () {
+            Route::get('/stats', [FinanceReportController::class, 'stats'])
+                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+                ->name('finance.stats');
+            Route::get('/budget-lines/flagged', [FinanceReportController::class, 'flaggedBudgetLines'])
+                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+                ->name('finance.budget-lines.flagged');
+            Route::get('/recent-actions', [FinanceReportController::class, 'recentActions'])
+                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+                ->name('finance.recent-actions');
+        });
+
         // --- Audit Reports ---
         Route::prefix('audit')->group(function () {
             Route::get('/logs', [AuditReportController::class, 'logs'])
