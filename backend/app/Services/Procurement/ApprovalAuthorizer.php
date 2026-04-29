@@ -10,7 +10,11 @@ use App\Models\User;
  * Single source of truth for "can this user act on a given PR approval stage?".
  *
  * Business rules (defined by the organisation):
- *   - budget_holder : the project manager of the PR's linked project, OR any admin/super_admin
+ *   - budget_holder : the employee explicitly set as the PR's budget_holder_id
+ *                     (the requester picks this at creation; defaults to the
+ *                     linked project's manager). For legacy PRs without an
+ *                     explicit budget_holder_id, falls back to the linked
+ *                     project's manager. Admins always bypass.
  *   - finance       : any manager in the Finance department (code=FINANCE), OR any admin
  *   - procurement   : any manager in the Procurement department (code=PROCUREMENT), OR any admin
  *
@@ -133,10 +137,35 @@ class ApprovalAuthorizer
 
     private function canActAsBudgetHolder(User $user, Requisition $requisition): array
     {
+        // Preferred path: explicit budget holder set on the requisition.
+        if ($requisition->budget_holder_id) {
+            $requisition->loadMissing('budgetHolder');
+            $holder = $requisition->budgetHolder;
+
+            if (!$holder) {
+                return [
+                    'allowed' => false,
+                    'reason'  => 'The selected budget holder no longer exists — please ask an administrator to reassign.',
+                ];
+            }
+
+            if ($holder->email && strcasecmp($holder->email, $user->email) === 0) {
+                return ['allowed' => true, 'reason' => null];
+            }
+
+            return [
+                'allowed' => false,
+                'reason'  => 'Only the assigned budget holder (or an administrator) can approve at the Budget Holder stage.',
+            ];
+        }
+
+        // Legacy fallback: PRs created before budget_holder_id existed and that
+        // the migration backfill couldn't fill (e.g. project had no manager
+        // at the time). Defer to the linked project's current manager.
         if (!$requisition->project_id) {
             return [
                 'allowed' => false,
-                'reason'  => 'This purchase request is not linked to a project — only an administrator can approve as Budget Holder.',
+                'reason'  => 'This purchase request has no budget holder and is not linked to a project — only an administrator can approve as Budget Holder.',
             ];
         }
 
@@ -146,7 +175,7 @@ class ApprovalAuthorizer
         if (!$pm) {
             return [
                 'allowed' => false,
-                'reason'  => 'The linked project has no assigned project manager.',
+                'reason'  => 'The linked project has no assigned project manager — only an administrator can approve as Budget Holder.',
             ];
         }
 

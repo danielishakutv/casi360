@@ -17,6 +17,7 @@ class Requisition extends Model
         'submitted_by',
         'purchase_order_id',
         'project_id',
+        'budget_holder_id',
         'title',
         'date',
         'justification',
@@ -100,6 +101,11 @@ class Requisition extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function budgetHolder()
+    {
+        return $this->belongsTo(Employee::class, 'budget_holder_id');
     }
 
     public function items()
@@ -283,6 +289,9 @@ class Requisition extends Model
             'project_id'            => $this->project_id,
             'project_name'          => $this->project?->name,
             'project_manager_id'    => $this->project?->project_manager_id,
+            'budget_holder_id'      => $this->budget_holder_id,
+            'budget_holder_name'    => $this->budgetHolder?->name,
+            'budget_holder_email'   => $this->budgetHolder?->email,
             'justification'         => $this->justification,
             'priority'              => $this->priority,
             'needed_by'             => $this->needed_by?->toDateString(),

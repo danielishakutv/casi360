@@ -106,10 +106,16 @@ class RequisitionController extends Controller
             $data['status']            = 'draft';
 
             // If a project is linked, sync project_code from the canonical source
+            // and — when the requester didn't pick one — default the budget holder
+            // to the project's manager. The requester can still override via the
+            // form; an empty value here means "use the project manager".
             if (!empty($data['project_id'])) {
                 $project = Project::find($data['project_id']);
                 if ($project) {
                     $data['project_code'] = $project->project_code;
+                    if (empty($data['budget_holder_id']) && $project->project_manager_id) {
+                        $data['budget_holder_id'] = $project->project_manager_id;
+                    }
                 }
             }
 
@@ -186,12 +192,18 @@ class RequisitionController extends Controller
             $items = $data['items'] ?? null;
             unset($data['items']);
 
-            // Keep project_code in sync with the selected project
+            // Keep project_code in sync with the selected project. When the
+            // project changes and the caller did not also send an explicit
+            // budget_holder_id, re-default it to the new project's manager so
+            // the approval chain routes correctly.
             if (array_key_exists('project_id', $data)) {
                 if (!empty($data['project_id'])) {
                     $project = Project::find($data['project_id']);
                     if ($project) {
                         $data['project_code'] = $project->project_code;
+                        if (!array_key_exists('budget_holder_id', $data) && $project->project_manager_id) {
+                            $data['budget_holder_id'] = $project->project_manager_id;
+                        }
                     }
                 } else {
                     $data['project_code'] = null;
@@ -307,6 +319,16 @@ class RequisitionController extends Controller
 
         if ($requisition->items()->count() === 0) {
             return $this->error('Cannot submit a purchase request with no items.', 422);
+        }
+
+        // Stage 1 of the approval chain routes to the budget holder. Block
+        // submission until that's known, so the chain is never created with
+        // a stage that nobody can act on.
+        if (empty($requisition->budget_holder_id)) {
+            return $this->error(
+                'Cannot submit: a budget holder must be set before this purchase request can enter the approval chain.',
+                422
+            );
         }
 
         return DB::transaction(function () use ($requisition) {

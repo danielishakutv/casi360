@@ -27,6 +27,7 @@ class UpdateRequisitionRequest extends FormRequest
             'logistics_involved' => 'nullable|boolean',
             'boq' => 'nullable|boolean',
             'project_id' => 'nullable|uuid|exists:projects,id',
+            'budget_holder_id' => 'nullable|uuid|exists:employees,id',
             'project_code' => 'nullable|string|max:100',
             'donor' => 'nullable|string|max:255',
             'currency' => 'nullable|string|max:10',
@@ -56,6 +57,7 @@ class UpdateRequisitionRequest extends FormRequest
         return [
             'department_id.exists' => 'The selected department does not exist.',
             'requested_by.exists' => 'The selected employee does not exist.',
+            'budget_holder_id.exists' => 'The selected budget holder does not exist.',
             'purchase_order_id.exists' => 'The selected purchase order does not exist.',
         ];
     }
