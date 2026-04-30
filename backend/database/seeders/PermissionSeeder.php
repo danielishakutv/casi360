@@ -527,9 +527,13 @@ class PermissionSeeder extends Seeder
                 'procurement.inventory.create' => false,
                 'procurement.inventory.edit' => false,
                 'procurement.inventory.delete' => false,
+                /* Anyone in the organisation can raise a Purchase Request,
+                   so staff get create + edit on requisitions by default.
+                   The PR's approval chain still routes the document to the
+                   right approver before it becomes live. */
                 'procurement.requisitions.view' => true,
-                'procurement.requisitions.create' => false,
-                'procurement.requisitions.edit' => false,
+                'procurement.requisitions.create' => true,
+                'procurement.requisitions.edit' => true,
                 'procurement.requisitions.delete' => false,
                 'procurement.approval.manager_review' => false,
                 'procurement.approval.finance_check' => false,
