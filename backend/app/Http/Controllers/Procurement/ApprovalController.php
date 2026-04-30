@@ -183,7 +183,15 @@ class ApprovalController extends Controller
      * ?scope=mine    (default) — items the authenticated user can actually act on
      * ?scope=all               — all in-flight PRs at any stage
      * ?scope=history           — completed PRs (approved / rejected / revision / fulfilled / cancelled)
-     *                            supports: ?search=, ?page=, ?per_page=
+     *                            supports: ?search=, ?page=, ?per_page=, ?mine=1
+     *
+     * History scoping:
+     *   - Users with `procurement.approvals.view_all` (and super_admin) see the whole
+     *     organisation by default. They may opt into a personal view with ?mine=1.
+     *   - Users without that permission are silently restricted to records that concern
+     *     them: created/submitted by them, acted on by them, or requested by a
+     *     department-mate. The ?mine flag from the client is honoured but cannot widen
+     *     visibility beyond that.
      */
     public function pendingApprovals(Request $request): JsonResponse
     {
@@ -192,7 +200,7 @@ class ApprovalController extends Controller
 
         /* ---- History scope — paginated completed PRs ---- */
         if ($scope === 'history') {
-            $result = $this->getHistoryRequisitions($request);
+            $result = $this->getHistoryRequisitions($request, $user);
             return $this->success([
                 'purchase_orders' => [],
                 'requisitions'    => $result['items'],
@@ -240,14 +248,27 @@ class ApprovalController extends Controller
 
     /**
      * Paginated, searchable history of completed requisitions.
+     *
+     * Visibility rules:
+     *   - super_admin and holders of procurement.approvals.view_all see the whole
+     *     organisation unless they explicitly request ?mine=1 (a future toggle).
+     *   - Everyone else is forced to the personal scope regardless of the flag.
      */
-    private function getHistoryRequisitions(Request $request): array
+    private function getHistoryRequisitions(Request $request, $user): array
     {
         $perPage = min((int) $request->input('per_page', 15), 100);
         $search  = $request->input('search', '');
 
+        $hasViewAll  = $this->userHasPermission($user, 'procurement.approvals.view_all');
+        $mineRequested = $request->boolean('mine');
+        $applyPersonalScope = !$hasViewAll || $mineRequested;
+
         $query = Requisition::with(['department', 'requestedBy', 'approvals', 'project'])
             ->whereIn('status', ['approved', 'rejected', 'revision', 'fulfilled', 'cancelled']);
+
+        if ($applyPersonalScope) {
+            $this->applyPersonalScope($query, $user);
+        }
 
         if ($search !== '') {
             $term = str_replace(['%', '_'], ['\%', '\_'], $search);
@@ -293,6 +314,51 @@ class ApprovalController extends Controller
                 'to'           => $paginated->lastItem(),
             ],
         ];
+    }
+
+    /**
+     * Restrict a Requisition query to records that concern the given user:
+     *   1. requested or submitted by them, OR
+     *   2. they have an audit-log entry on the PR (any action), OR
+     *   3. they have acted on a stage in the approval chain, OR
+     *   4. the requester shares their department (department-mate visibility).
+     *
+     * Uses indexed EXISTS subqueries so it scales for large history tables.
+     */
+    private function applyPersonalScope($query, $user): void
+    {
+        $userId         = $user->id;
+        $userDepartment = $user->department; // string column on users; nullable
+
+        $query->where(function ($q) use ($userId, $userDepartment) {
+            $q->where('requisitions.requested_by', $userId)
+              ->orWhere('requisitions.submitted_by', $userId)
+              ->orWhereExists(function ($sub) use ($userId) {
+                  $sub->select(DB::raw(1))
+                      ->from('requisition_audit_logs as ral')
+                      ->whereColumn('ral.requisition_id', 'requisitions.id')
+                      ->where('ral.actor_id', $userId);
+              })
+              ->orWhereExists(function ($sub) use ($userId) {
+                  $sub->select(DB::raw(1))
+                      ->from('requisition_approvals as ra')
+                      ->whereColumn('ra.requisition_id', 'requisitions.id')
+                      ->where('ra.actor_id', $userId);
+              });
+
+            // Department-mate visibility — requester is in the same department
+            // as the current user. Only applied when the current user is in a
+            // department, otherwise it would silently match every requester
+            // whose department is also blank.
+            if (!empty($userDepartment)) {
+                $q->orWhereExists(function ($sub) use ($userDepartment) {
+                    $sub->select(DB::raw(1))
+                        ->from('users as req_user')
+                        ->whereColumn('req_user.id', 'requisitions.requested_by')
+                        ->where('req_user.department', $userDepartment);
+                });
+            }
+        });
     }
 
     /**

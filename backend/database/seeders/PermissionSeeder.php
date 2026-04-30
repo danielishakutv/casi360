@@ -109,6 +109,7 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'budget_holder', 'description' => 'Act as Budget Holder — Stage 1 PR approval (project manager of the linked project)'],
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'finance',       'description' => 'Act as Finance approver — Stage 2 PR approval (Finance department manager)'],
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'procurement',   'description' => 'Act as Procurement Manager — Stage 3 PR approval (Procurement department manager, final stage)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'view_all',      'description' => 'See approval history for the whole organisation, not just records that concern this user'],
 
             // --- Procurement: Disbursements ---
             ['module' => 'procurement', 'feature' => 'disbursements', 'action' => 'view', 'description' => 'View disbursement records'],
@@ -284,6 +285,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => true,
                 'procurement.approvals.finance'       => true,
                 'procurement.approvals.procurement'   => true,
+                'procurement.approvals.view_all'      => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => true,
                 'procurement.vendor_categories.view' => true,
@@ -414,6 +416,8 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => true,
                 'procurement.approvals.finance'       => true,
                 'procurement.approvals.procurement'   => true,
+                // Managers see only history that concerns them by default; super admin can grant view_all per manager.
+                'procurement.approvals.view_all'      => false,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,
@@ -544,6 +548,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => false,
                 'procurement.approvals.finance'       => false,
                 'procurement.approvals.procurement'   => false,
+                'procurement.approvals.view_all'      => false,
                 'procurement.disbursements.view' => false,
                 'procurement.disbursements.create' => false,
                 'procurement.vendor_categories.view' => true,
