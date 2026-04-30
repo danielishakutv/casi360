@@ -246,4 +246,55 @@ class RfqController extends Controller
             return $this->success(null, 'RFQ cancelled successfully');
         });
     }
+
+    /**
+     * POST /api/v1/procurement/rfq/{id}/submit
+     *
+     * Transitions a draft RFQ to "sent" — the procurement team has shared the
+     * RFQ with the selected vendor (off-app, via email/print) and the record
+     * should now be tracked as live. Restricted to procurement managers and
+     * admins, same as RFQ creation.
+     */
+    public function submit(string $id): JsonResponse
+    {
+        $rfq = Rfq::with('items')->findOrFail($id);
+
+        if (!$this->authorizer->canManageRfqs(auth()->user())) {
+            return $this->error(
+                'Only a manager in the Procurement department (or an administrator) can send a Request for Quotation to vendors.',
+                403
+            );
+        }
+
+        if ($rfq->status !== 'draft') {
+            return $this->error(
+                "Only draft RFQs can be sent to vendors (current status: {$rfq->status}).",
+                422
+            );
+        }
+
+        if ($rfq->items()->count() === 0) {
+            return $this->error('Cannot send an RFQ with no items.', 422);
+        }
+
+        return DB::transaction(function () use ($rfq) {
+            $oldStatus = $rfq->status;
+            $rfq->update(['status' => 'sent']);
+            $rfq->refresh();
+            $rfq->load(['vendor', 'items']);
+
+            AuditLog::record(
+                auth()->id(),
+                'rfq_sent',
+                'rfq',
+                $rfq->id,
+                ['status' => $oldStatus],
+                ['status' => 'sent']
+            );
+
+            return $this->success([
+                'rfq' => $rfq->toDetailArray(),
+            ], 'RFQ marked as sent to vendor');
+        });
+    }
 }

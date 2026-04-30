@@ -623,6 +623,9 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::delete('/rfq/{id}', [RfqController::class, 'destroy'])
                 ->middleware(PermissionMiddleware::class . ':procurement.rfq.delete')
                 ->name('procurement.rfq.destroy');
+            Route::post('/rfq/{id}/submit', [RfqController::class, 'submit'])
+                ->middleware(PermissionMiddleware::class . ':procurement.rfq.edit')
+                ->name('procurement.rfq.submit');
         });
 
         // --- GRN (Goods Received Note) ---
