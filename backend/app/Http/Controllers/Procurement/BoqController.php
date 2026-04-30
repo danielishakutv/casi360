@@ -10,18 +10,27 @@ use App\Models\AuditLog;
 use App\Models\Boq;
 use App\Models\BoqAuditLog;
 use App\Models\BoqItem;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class BoqController extends Controller
 {
+    public function __construct(private DocumentScopeService $scopeService)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/boq
      */
     public function index(Request $request): JsonResponse
     {
         $query = Boq::query();
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.boq.view_all', $request)) {
+            $this->scopeService->applyToBoqs($query, $request->user());
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);

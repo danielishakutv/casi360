@@ -10,14 +10,17 @@ use App\Models\Requisition;
 use App\Models\Rfq;
 use App\Models\RfqItem;
 use App\Services\Procurement\ApprovalAuthorizer;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RfqController extends Controller
 {
-    public function __construct(private ApprovalAuthorizer $authorizer)
-    {
+    public function __construct(
+        private ApprovalAuthorizer $authorizer,
+        private DocumentScopeService $scopeService,
+    ) {
     }
 
     /**
@@ -26,6 +29,10 @@ class RfqController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Rfq::with('vendor');
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.rfq.view_all', $request)) {
+            $this->scopeService->applyToRfqs($query, $request->user());
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);

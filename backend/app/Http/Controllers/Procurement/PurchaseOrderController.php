@@ -8,18 +8,27 @@ use App\Http\Requests\Procurement\UpdatePurchaseOrderRequest;
 use App\Models\AuditLog;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderController extends Controller
 {
+    public function __construct(private DocumentScopeService $scopeService)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/purchase-orders
      */
     public function index(Request $request): JsonResponse
     {
         $query = PurchaseOrder::with(['vendor', 'department', 'requestedBy', 'submittedBy']);
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.purchase_orders.view_all', $request)) {
+            $this->scopeService->applyToPurchaseOrders($query, $request->user());
+        }
 
         // Filters
         if ($request->filled('status')) {

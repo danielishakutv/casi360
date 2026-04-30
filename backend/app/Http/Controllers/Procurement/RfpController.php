@@ -8,18 +8,27 @@ use App\Http\Requests\Procurement\UpdateRfpRequest;
 use App\Models\AuditLog;
 use App\Models\Rfp;
 use App\Models\RfpItem;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RfpController extends Controller
 {
+    public function __construct(private DocumentScopeService $scopeService)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/rfp
      */
     public function index(Request $request): JsonResponse
     {
         $query = Rfp::with('vendor');
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.rfp.view_all', $request)) {
+            $this->scopeService->applyToRfps($query, $request->user());
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);

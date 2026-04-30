@@ -10,18 +10,27 @@ use App\Models\Project;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class RequisitionController extends Controller
 {
+    public function __construct(private DocumentScopeService $scopeService)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/requisitions
      */
     public function index(Request $request): JsonResponse
     {
         $query = Requisition::with(['department', 'requestedBy', 'submittedBy', 'purchaseOrder', 'project', 'approvals']);
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.requisitions.view_all', $request)) {
+            $this->scopeService->applyToRequisitions($query, $request->user());
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);

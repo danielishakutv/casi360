@@ -8,18 +8,27 @@ use App\Http\Requests\Procurement\UpdateGrnRequest;
 use App\Models\AuditLog;
 use App\Models\Grn;
 use App\Models\GrnItem;
+use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class GrnController extends Controller
 {
+    public function __construct(private DocumentScopeService $scopeService)
+    {
+    }
+
     /**
      * GET /api/v1/procurement/grn
      */
     public function index(Request $request): JsonResponse
     {
         $query = Grn::with('vendor');
+
+        if ($this->scopeService->shouldScope($request->user(), 'procurement.grn.view_all', $request)) {
+            $this->scopeService->applyToGrns($query, $request->user());
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
