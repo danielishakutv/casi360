@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Renames the organization-group system_settings keys from `org_*` to
@@ -88,14 +89,22 @@ return new class extends Migration
             }
         }
 
+        // Insert any missing new keys. We do an explicit exists-check + insert
+        // (rather than updateOrInsert) so we can supply a UUID for the
+        // primary key — system_settings.id has no DB default and Eloquent's
+        // auto-UUID lives on the model, not the raw query builder.
         foreach (self::NEW_KEYS as $row) {
-            DB::table('system_settings')->updateOrInsert(
-                ['key' => $row['key']],
-                array_merge($row, [
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ])
-            );
+            $exists = DB::table('system_settings')->where('key', $row['key'])->exists();
+            if (!$exists) {
+                DB::table('system_settings')->insert(array_merge(
+                    ['id' => (string) Str::uuid()],
+                    $row,
+                    [
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                ));
+            }
         }
     }
 
