@@ -47,6 +47,7 @@ use App\Http\Controllers\Procurement\ApprovalController;
 use App\Http\Controllers\Procurement\BoqController;
 use App\Http\Controllers\Procurement\DisbursementController;
 use App\Http\Controllers\Procurement\GrnController;
+use App\Http\Controllers\Procurement\InvoiceController;
 use App\Http\Controllers\Procurement\InventoryItemController;
 use App\Http\Controllers\Procurement\PurchaseOrderController;
 use App\Http\Controllers\Procurement\ProcurementStatsController;
@@ -666,6 +667,32 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::delete('/rfp/{id}', [RfpController::class, 'destroy'])
                 ->middleware(PermissionMiddleware::class . ':procurement.rfp.delete')
                 ->name('procurement.rfp.destroy');
+        });
+
+        // --- Invoices (Vendor Invoices) ---
+        // The supplier's invoice for a given PO. Sits between PO/GRN and
+        // the RFP that pays for it. Procurement creates while pending,
+        // Finance approves/rejects via the /approval endpoint, and a
+        // paid RFP can later flip the invoice to status=paid.
+        Route::get('/invoices', [InvoiceController::class, 'index'])
+            ->middleware(PermissionMiddleware::class . ':procurement.invoices.view')
+            ->name('procurement.invoices.index');
+        Route::get('/invoices/{id}', [InvoiceController::class, 'show'])
+            ->middleware(PermissionMiddleware::class . ':procurement.invoices.view')
+            ->name('procurement.invoices.show');
+        Route::middleware(['throttle:60,1', InvalidateCache::class . ':procurement'])->group(function () {
+            Route::post('/invoices', [InvoiceController::class, 'store'])
+                ->middleware(PermissionMiddleware::class . ':procurement.invoices.create')
+                ->name('procurement.invoices.store');
+            Route::patch('/invoices/{id}', [InvoiceController::class, 'update'])
+                ->middleware(PermissionMiddleware::class . ':procurement.invoices.edit')
+                ->name('procurement.invoices.update');
+            Route::delete('/invoices/{id}', [InvoiceController::class, 'destroy'])
+                ->middleware(PermissionMiddleware::class . ':procurement.invoices.delete')
+                ->name('procurement.invoices.destroy');
+            Route::patch('/invoices/{id}/approval', [InvoiceController::class, 'processApproval'])
+                ->middleware(PermissionMiddleware::class . ':procurement.invoices.approve')
+                ->name('procurement.invoices.approval');
         });
     });
 

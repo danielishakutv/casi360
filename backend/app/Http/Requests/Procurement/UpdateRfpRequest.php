@@ -18,6 +18,7 @@ class UpdateRfpRequest extends FormRequest
             'grn_reference' => ['nullable', 'string', 'max:255'],
             'project_code' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'uuid', 'exists:vendors,id'],
+            'invoice_id' => ['nullable', 'uuid', 'exists:invoices,id'],
             'payee' => ['nullable', 'string', 'max:255'],
             'payment_method' => ['nullable', 'in:bank_transfer,cash,cheque'],
             'currency' => ['nullable', 'string', 'max:10'],

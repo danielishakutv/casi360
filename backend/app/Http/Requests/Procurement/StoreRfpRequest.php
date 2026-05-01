@@ -18,6 +18,11 @@ class StoreRfpRequest extends FormRequest
             'grn_reference' => ['nullable', 'string', 'max:255'],
             'project_code' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'uuid', 'exists:vendors,id'],
+            // The supplier invoice this RFP pays. Optional for back-compat
+            // with legacy RFPs created before invoices existed; new flows
+            // require it via the frontend. The controller additionally
+            // enforces that referenced invoices be `approved`.
+            'invoice_id' => ['nullable', 'uuid', 'exists:invoices,id'],
             'payee' => ['nullable', 'string', 'max:255'],
             'payment_method' => ['nullable', 'in:bank_transfer,cash,cheque'],
             'currency' => ['nullable', 'string', 'max:10'],

@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Models\AuditLog;
 use App\Models\Boq;
 use App\Models\Grn;
+use App\Models\Invoice;
 use App\Models\PurchaseOrder;
 use App\Models\Requisition;
 use App\Models\Rfp;
@@ -89,7 +90,7 @@ class ProfileController extends Controller
         $user    = $request->user();
         $perPage = min(max((int) $request->input('per_page', 10), 1), 50);
 
-        $entityTypes = ['requisition', 'purchase_order', 'boq', 'rfq', 'rfp', 'grn'];
+        $entityTypes = ['requisition', 'purchase_order', 'boq', 'rfq', 'rfp', 'grn', 'invoice'];
 
         $paginated = AuditLog::where('user_id', $user->id)
             ->whereIn('entity_type', $entityTypes)
@@ -109,6 +110,7 @@ class ProfileController extends Controller
             'rfq'            => isset($idsByType['rfq'])            ? Rfq::whereIn('id', $idsByType['rfq'])->get()->keyBy('id')                     : collect(),
             'rfp'            => isset($idsByType['rfp'])            ? Rfp::whereIn('id', $idsByType['rfp'])->get()->keyBy('id')                     : collect(),
             'grn'            => isset($idsByType['grn'])            ? Grn::whereIn('id', $idsByType['grn'])->get()->keyBy('id')                     : collect(),
+            'invoice'        => isset($idsByType['invoice'])        ? Invoice::whereIn('id', $idsByType['invoice'])->get()->keyBy('id')             : collect(),
         ];
 
         $activity = $logs->map(fn ($log) => $this->formatActivityItem($log, $entityIndex))->values();
@@ -164,6 +166,12 @@ class ProfileController extends Controller
                 case 'grn':
                     $number = $entity->grn_number;
                     $title  = $entity->delivery_note_no ?: null;
+                    break;
+                case 'invoice':
+                    $number = $entity->invoice_number;
+                    // Use the linked PO number as a human-readable hint —
+                    // invoices don't carry a free-text title of their own.
+                    $title  = $entity->purchaseOrder?->po_number;
                     break;
             }
         }

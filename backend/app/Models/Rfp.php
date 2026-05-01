@@ -13,6 +13,7 @@ class Rfp extends Model
 
     protected $fillable = [
         'rfp_number',
+        'invoice_id',
         'po_reference',
         'grn_reference',
         'project_code',
@@ -55,6 +56,11 @@ class Rfp extends Model
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class);
     }
 
     public function items()
@@ -117,6 +123,8 @@ class Rfp extends Model
         return [
             'id' => $this->id,
             'rfp_number' => $this->rfp_number,
+            'invoice_id' => $this->invoice_id,
+            'invoice_number' => $this->invoice?->invoice_number,
             'po_reference' => $this->po_reference,
             'grn_reference' => $this->grn_reference,
             'project_code' => $this->project_code,

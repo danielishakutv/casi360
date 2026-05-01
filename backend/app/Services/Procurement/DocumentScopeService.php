@@ -173,6 +173,32 @@ class DocumentScopeService
         });
     }
 
+    public function applyToInvoices(Builder $query, User $user): void
+    {
+        $userId = $user->id;
+        $departmentName = $user->department;
+
+        $query->where(function ($q) use ($userId, $departmentName) {
+            $q->where('invoices.created_by', $userId)
+              ->orWhere('invoices.submitted_by', $userId)
+              ->orWhere('invoices.approved_by', $userId)
+              ->orWhere(fn ($a) => $this->whereTouchedInGenericAuditLog($a, $userId, 'invoice', 'invoices.id'));
+
+            // Department-mate visibility — invoice's PO sits in the same
+            // department as the user. Mirrors the PO scope predicate so
+            // a user who can see a PO can also see the invoices against it.
+            if (!empty($departmentName)) {
+                $q->orWhereExists(function ($sub) use ($departmentName) {
+                    $sub->select(DB::raw(1))
+                        ->from('purchase_orders as po')
+                        ->join('departments as d', 'd.id', '=', 'po.department_id')
+                        ->whereColumn('po.id', 'invoices.po_id')
+                        ->where('d.name', $departmentName);
+                });
+            }
+        });
+    }
+
     /* ----------------------------------------------------------------
      * Internals
      * ---------------------------------------------------------------- */

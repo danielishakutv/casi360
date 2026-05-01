@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Procurement\StoreRfpRequest;
 use App\Http\Requests\Procurement\UpdateRfpRequest;
 use App\Models\AuditLog;
+use App\Models\Invoice;
 use App\Models\Rfp;
 use App\Models\RfpItem;
 use App\Services\Procurement\DocumentScopeService;
@@ -86,8 +87,26 @@ class RfpController extends Controller
      */
     public function store(StoreRfpRequest $request): JsonResponse
     {
-        return DB::transaction(function () use ($request) {
-            $data = $request->validated();
+        $data = $request->validated();
+
+        // Gate: a payment request can only pay an *approved* invoice. We
+        // accept null for backward compatibility, but if an invoice_id is
+        // supplied it must be currently approved (not pending, rejected,
+        // cancelled, or already paid).
+        if (!empty($data['invoice_id'])) {
+            $invoice = Invoice::find($data['invoice_id']);
+            if (!$invoice) {
+                return $this->error('Invoice not found.', 422);
+            }
+            if ($invoice->status !== 'approved') {
+                return $this->error(
+                    "Invoice {$invoice->invoice_number} is {$invoice->status}; only approved invoices can be paid.",
+                    422
+                );
+            }
+        }
+
+        return DB::transaction(function () use ($request, $data) {
             $items = $data['items'] ?? [];
             unset($data['items']);
 
