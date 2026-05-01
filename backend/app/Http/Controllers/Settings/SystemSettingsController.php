@@ -111,11 +111,12 @@ class SystemSettingsController extends Controller
             $setting->update(['value' => $newValue]);
 
             AuditLog::record(
+                auth()->id(),
                 'system_setting_updated',
-                'system_settings',
+                'system_setting',
                 $setting->id,
-                ['key' => $setting->key, 'old_value' => $oldValue],
-                ['key' => $setting->key, 'new_value' => $newValue]
+                ['key' => $setting->key, 'value' => $oldValue],
+                ['key' => $setting->key, 'value' => $newValue]
             );
 
             return $this->success([
@@ -171,11 +172,12 @@ class SystemSettingsController extends Controller
                 $setting->update(['value' => $storedValue]);
 
                 AuditLog::record(
+                    auth()->id(),
                     'system_setting_updated',
-                    'system_settings',
+                    'system_setting',
                     $setting->id,
-                    ['key' => $key, 'old_value' => $oldValue],
-                    ['key' => $key, 'new_value' => $storedValue]
+                    ['key' => $key, 'value' => $oldValue],
+                    ['key' => $key, 'value' => $storedValue]
                 );
 
                 $updated[] = $key;

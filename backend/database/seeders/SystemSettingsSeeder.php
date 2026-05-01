@@ -17,7 +17,7 @@ class SystemSettingsSeeder extends Seeder
             */
             [
                 'group'       => 'organization',
-                'key'         => 'org_name',
+                'key'         => 'organization_name',
                 'value'       => 'CASI',
                 'type'        => 'string',
                 'label'       => 'Organization Name',
@@ -26,7 +26,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_acronym',
+                'key'         => 'organization_acronym',
                 'value'       => 'CASI',
                 'type'        => 'string',
                 'label'       => 'Organization Acronym',
@@ -35,7 +35,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_email',
+                'key'         => 'organization_email',
                 'value'       => 'info@casi.org',
                 'type'        => 'string',
                 'label'       => 'Contact Email',
@@ -44,7 +44,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_phone',
+                'key'         => 'organization_phone',
                 'value'       => null,
                 'type'        => 'string',
                 'label'       => 'Contact Phone',
@@ -53,7 +53,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_address',
+                'key'         => 'organization_address',
                 'value'       => null,
                 'type'        => 'text',
                 'label'       => 'Address',
@@ -62,7 +62,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_city',
+                'key'         => 'organization_city',
                 'value'       => null,
                 'type'        => 'string',
                 'label'       => 'City',
@@ -71,7 +71,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_state',
+                'key'         => 'organization_state',
                 'value'       => null,
                 'type'        => 'string',
                 'label'       => 'State / Province',
@@ -80,7 +80,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_country',
+                'key'         => 'organization_country',
                 'value'       => null,
                 'type'        => 'string',
                 'label'       => 'Country',
@@ -89,7 +89,7 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_website',
+                'key'         => 'organization_website',
                 'value'       => 'https://casi360.com',
                 'type'        => 'string',
                 'label'       => 'Website URL',
@@ -98,11 +98,38 @@ class SystemSettingsSeeder extends Seeder
             ],
             [
                 'group'       => 'organization',
-                'key'         => 'org_logo_url',
+                'key'         => 'organization_logo_url',
                 'value'       => null,
                 'type'        => 'string',
                 'label'       => 'Logo URL',
                 'description' => 'URL to the organization logo image.',
+                'is_public'   => true,
+            ],
+            [
+                'group'       => 'organization',
+                'key'         => 'organization_registration_number',
+                'value'       => null,
+                'type'        => 'string',
+                'label'       => 'Registration Number',
+                'description' => 'Official registration number with the regulatory authority.',
+                'is_public'   => true,
+            ],
+            [
+                'group'       => 'organization',
+                'key'         => 'organization_tax_id',
+                'value'       => null,
+                'type'        => 'string',
+                'label'       => 'Tax ID (TIN)',
+                'description' => 'Tax identification number / TIN.',
+                'is_public'   => false,
+            ],
+            [
+                'group'       => 'organization',
+                'key'         => 'organization_founded',
+                'value'       => null,
+                'type'        => 'string',
+                'label'       => 'Year Founded',
+                'description' => 'Year the organization was established.',
                 'is_public'   => true,
             ],
 
