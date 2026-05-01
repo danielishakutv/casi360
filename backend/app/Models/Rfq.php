@@ -13,6 +13,7 @@ class Rfq extends Model
 
     protected $fillable = [
         'rfq_number',
+        'created_by',
         'title',
         'pr_reference',
         'project_code',
@@ -53,6 +54,11 @@ class Rfq extends Model
         return $this->belongsTo(Vendor::class);
     }
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function items()
     {
         return $this->hasMany(RfqItem::class);
@@ -89,6 +95,8 @@ class Rfq extends Model
         return [
             'id' => $this->id,
             'rfq_number' => $this->rfq_number,
+            'created_by' => $this->created_by,
+            'created_by_name' => $this->creator?->name,
             'title' => $this->title,
             'pr_reference' => $this->pr_reference,
             'project_code' => $this->project_code,

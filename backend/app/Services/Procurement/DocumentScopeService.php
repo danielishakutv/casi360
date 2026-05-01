@@ -141,8 +141,12 @@ class DocumentScopeService
 
     public function applyToRfqs(Builder $query, User $user): void
     {
-        // RFQs have no per-user identity columns. Scope by audit-log touch only.
-        $this->whereTouchedInGenericAuditLog($query, $user->id, 'rfq', 'rfqs.id');
+        $userId = $user->id;
+
+        $query->where(function ($q) use ($userId) {
+            $q->where('rfqs.created_by', $userId)
+              ->orWhere(fn ($a) => $this->whereTouchedInGenericAuditLog($a, $userId, 'rfq', 'rfqs.id'));
+        });
     }
 
     public function applyToRfps(Builder $query, User $user): void
@@ -161,9 +165,12 @@ class DocumentScopeService
 
     public function applyToGrns(Builder $query, User $user): void
     {
-        // GRNs have no per-user identity columns and no department field.
-        // Audit-log touch is the only available signal.
-        $this->whereTouchedInGenericAuditLog($query, $user->id, 'grn', 'grns.id');
+        $userId = $user->id;
+
+        $query->where(function ($q) use ($userId) {
+            $q->where('grns.created_by', $userId)
+              ->orWhere(fn ($a) => $this->whereTouchedInGenericAuditLog($a, $userId, 'grn', 'grns.id'));
+        });
     }
 
     /* ----------------------------------------------------------------

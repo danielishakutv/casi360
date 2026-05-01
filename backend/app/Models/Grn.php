@@ -13,6 +13,7 @@ class Grn extends Model
 
     protected $fillable = [
         'grn_number',
+        'created_by',
         'po_reference',
         'vendor_id',
         'office',
@@ -36,6 +37,11 @@ class Grn extends Model
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function items()
@@ -74,6 +80,8 @@ class Grn extends Model
         return [
             'id' => $this->id,
             'grn_number' => $this->grn_number,
+            'created_by' => $this->created_by,
+            'created_by_name' => $this->creator?->name,
             'po_reference' => $this->po_reference,
             'vendor_id' => $this->vendor_id,
             'vendor_name' => $this->vendor?->name,

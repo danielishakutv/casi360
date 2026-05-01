@@ -144,7 +144,7 @@ class DocumentListScopeTest extends TestCase
         $this->assertNotContains($otherDept->id, $ids);
     }
 
-    /* ─────────── RFQ (audit-log only) ─────────── */
+    /* ─────────── RFQ ─────────── */
 
     public function test_rfq_list_staff_sees_only_their_touch(): void
     {
@@ -160,6 +160,35 @@ class DocumentListScopeTest extends TestCase
         $ids = collect($response->json('data.rfqs') ?? $response->json('data.items') ?? [])->pluck('id')->all();
         $this->assertContains($touched->id, $ids);
         $this->assertCount(1, $ids);
+    }
+
+    public function test_rfq_list_staff_sees_their_rfq_via_created_by_column(): void
+    {
+        // No audit_logs entry — only the created_by column links the row to
+        // the user. This covers freshly-created RFQs where created_by is set
+        // at insertion time, plus legacy rows backfilled by the migration.
+        $staff = $this->actingAsRole('staff');
+
+        $owned = $this->makeRfq(['created_by' => $staff->id]);
+        $this->makeRfq(); // unrelated, no created_by
+
+        $response = $this->getJson('/api/v1/procurement/rfq');
+
+        $ids = collect($response->json('data.rfqs') ?? $response->json('data.items') ?? [])->pluck('id')->all();
+        $this->assertEquals([$owned->id], $ids);
+    }
+
+    public function test_rfq_list_staff_does_not_see_orphan_legacy_rows(): void
+    {
+        // Legacy row: no created_by, no audit_logs entry. The staff user
+        // must NOT see it — confirms the gap is closed only when one of the
+        // signals exists, not silently widened.
+        $this->actingAsRole('staff');
+        $this->makeRfq();
+
+        $response = $this->getJson('/api/v1/procurement/rfq');
+
+        $this->assertCount(0, $response->json('data.rfqs') ?? $response->json('data.items') ?? []);
     }
 
     /* ─────────── RFP ─────────── */
@@ -178,7 +207,7 @@ class DocumentListScopeTest extends TestCase
         $this->assertNotContains($otherDept->id, $ids);
     }
 
-    /* ─────────── GRN (audit-log only) ─────────── */
+    /* ─────────── GRN ─────────── */
 
     public function test_grn_list_staff_sees_only_their_touch(): void
     {
@@ -194,6 +223,19 @@ class DocumentListScopeTest extends TestCase
         $ids = collect($response->json('data.grns') ?? $response->json('data.items') ?? [])->pluck('id')->all();
         $this->assertContains($touched->id, $ids);
         $this->assertCount(1, $ids);
+    }
+
+    public function test_grn_list_staff_sees_their_grn_via_created_by_column(): void
+    {
+        $staff = $this->actingAsRole('staff');
+
+        $owned = $this->makeGrn(['created_by' => $staff->id]);
+        $this->makeGrn();
+
+        $response = $this->getJson('/api/v1/procurement/grn');
+
+        $ids = collect($response->json('data.grns') ?? $response->json('data.items') ?? [])->pluck('id')->all();
+        $this->assertEquals([$owned->id], $ids);
     }
 
     /* ----------------------------------------------------------------

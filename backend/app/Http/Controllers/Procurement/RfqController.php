@@ -113,6 +113,7 @@ class RfqController extends Controller
 
             $data['rfq_number'] = Rfq::generateRfqNumber();
             $data['status'] = $data['status'] ?? 'draft';
+            $data['created_by'] = $request->user()->id;
 
             $rfq = Rfq::create($data);
 

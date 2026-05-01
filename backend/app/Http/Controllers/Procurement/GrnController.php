@@ -90,6 +90,7 @@ class GrnController extends Controller
 
             $data['grn_number'] = Grn::generateGrnNumber();
             $data['status'] = $data['status'] ?? 'draft';
+            $data['created_by'] = $request->user()->id;
 
             $grn = Grn::create($data);
 
