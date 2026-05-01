@@ -19,6 +19,7 @@
  *   POST   /api/v1/auth/change-password     - Change own password
  *   GET    /api/v1/auth/profile             - Get own profile
  *   PATCH  /api/v1/auth/profile             - Update own profile
+ *   GET    /api/v1/auth/activity            - Recent activity feed (own touches across procurement docs)
  *   DELETE /api/v1/auth/account             - Deactivate own account
  * 
  * ADMIN ONLY (super_admin, admin):
@@ -139,6 +140,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             // Profile management
             Route::get('/profile', [ProfileController::class, 'show'])->name('auth.profile');
             Route::patch('/profile', [ProfileController::class, 'update'])->name('auth.profile.update');
+            Route::get('/activity', [ProfileController::class, 'activity'])->name('auth.activity');
             Route::delete('/account', [ProfileController::class, 'destroy'])->name('auth.account.delete');
 
             /*
