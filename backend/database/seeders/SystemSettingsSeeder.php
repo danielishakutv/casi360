@@ -141,19 +141,19 @@ class SystemSettingsSeeder extends Seeder
             [
                 'group'       => 'localization',
                 'key'         => 'timezone',
-                'value'       => 'America/New_York',
+                'value'       => 'Africa/Lagos',
                 'type'        => 'string',
                 'label'       => 'Timezone',
-                'description' => 'Default timezone for date/time display.',
+                'description' => 'Default timezone for date/time display across the app.',
                 'is_public'   => false,
             ],
             [
                 'group'       => 'localization',
                 'key'         => 'date_format',
-                'value'       => 'MM/DD/YYYY',
+                'value'       => 'DD/MM/YYYY',
                 'type'        => 'string',
                 'label'       => 'Date Format',
-                'description' => 'Display format for dates.',
+                'description' => 'Display format for dates. DD = day, MM = month, YYYY = year.',
                 'is_public'   => false,
             ],
             [
@@ -168,7 +168,7 @@ class SystemSettingsSeeder extends Seeder
             [
                 'group'       => 'localization',
                 'key'         => 'currency',
-                'value'       => 'USD',
+                'value'       => 'NGN',
                 'type'        => 'string',
                 'label'       => 'Currency',
                 'description' => 'Default currency code (ISO 4217).',
@@ -177,7 +177,7 @@ class SystemSettingsSeeder extends Seeder
             [
                 'group'       => 'localization',
                 'key'         => 'currency_symbol',
-                'value'       => '$',
+                'value'       => '₦',
                 'type'        => 'string',
                 'label'       => 'Currency Symbol',
                 'description' => 'Symbol displayed with monetary values.',
@@ -189,7 +189,7 @@ class SystemSettingsSeeder extends Seeder
                 'value'       => 'en',
                 'type'        => 'string',
                 'label'       => 'Language',
-                'description' => 'Default system language.',
+                'description' => 'Default interface language.',
                 'is_public'   => false,
             ],
 
