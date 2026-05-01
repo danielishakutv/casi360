@@ -169,18 +169,32 @@ class RfpController extends Controller
 
     /**
      * PATCH /api/v1/procurement/rfp/{id}
+     *
+     * Editing windows:
+     *   - draft / pending / submitted : freely editable
+     *   - approved                    : ONLY allowed to transition to `paid`
+     *                                   (so Finance can record the payment
+     *                                   without a separate endpoint)
+     *   - any other status            : locked
      */
     public function update(UpdateRfpRequest $request, string $id): JsonResponse
     {
         $rfp = Rfp::with(['vendor', 'items'])->findOrFail($id);
 
-        if (!in_array($rfp->status, ['draft', 'pending', 'submitted'])) {
-            return $this->error('Only draft, pending or submitted RFPs can be edited.', 422);
+        $incomingStatus = $request->input('status');
+        $isApprovedToPaid = $rfp->status === 'approved' && $incomingStatus === 'paid';
+        $canEdit = in_array($rfp->status, ['draft', 'pending', 'submitted'], true) || $isApprovedToPaid;
+
+        if (!$canEdit) {
+            return $this->error('Only draft, pending or submitted RFPs can be edited (approved RFPs may only be marked as paid).', 422);
         }
 
         $oldValues = $rfp->toApiArray();
+        // Capture intent before the model is mutated so the post-save logic
+        // knows whether this PATCH was the "go to paid" transition.
+        $becomingPaid = $incomingStatus === 'paid' && $rfp->status !== 'paid';
 
-        return DB::transaction(function () use ($request, $rfp, $oldValues) {
+        return DB::transaction(function () use ($request, $rfp, $oldValues, $becomingPaid) {
             $data = $request->validated();
             $items = $data['items'] ?? null;
             unset($data['items']);
@@ -220,6 +234,29 @@ class RfpController extends Controller
             $rfp->refresh();
             $rfp->load(['vendor', 'items']);
 
+            // If this PATCH flipped the RFP to `paid` AND it references an
+            // approved invoice, flip that invoice to paid too. Defence:
+            // never touch an invoice that is already paid, rejected, or
+            // cancelled — the bookkeeper can correct the status manually
+            // if something is amiss, but the cycle should not silently
+            // overwrite their work.
+            if ($becomingPaid && $rfp->invoice_id) {
+                $invoice = Invoice::find($rfp->invoice_id);
+                if ($invoice && $invoice->status === 'approved') {
+                    $oldInvoiceValues = $invoice->toApiArray();
+                    $invoice->update(['status' => 'paid']);
+
+                    AuditLog::record(
+                        auth()->id(),
+                        'invoice_paid',
+                        'invoice',
+                        $invoice->id,
+                        $oldInvoiceValues,
+                        $invoice->fresh()->toApiArray()
+                    );
+                }
+            }
+
             AuditLog::record(
                 auth()->id(),
                 'rfp_updated',
@@ -231,7 +268,7 @@ class RfpController extends Controller
 
             return $this->success([
                 'rfp' => $rfp->toDetailArray(),
-            ], 'RFP updated successfully');
+            ], $becomingPaid ? 'RFP marked as paid' : 'RFP updated successfully');
         });
     }
 
