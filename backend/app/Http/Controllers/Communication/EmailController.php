@@ -9,6 +9,7 @@ use App\Models\Email;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class EmailController extends Controller
@@ -58,35 +59,51 @@ class EmailController extends Controller
         $data = $request->validated();
         $data['sent_by'] = auth()->id();
 
-        // Resolve recipients
-        $recipientQuery = User::whereNotNull('email');
-        if ($data['audience'] === 'individual') {
-            $recipientQuery->whereIn('id', $data['recipient_ids'] ?? []);
-        } elseif ($data['audience'] === 'department') {
-            $recipientQuery->whereHas('employee', function ($q) use ($data) {
-                $q->whereIn('department_id', $data['department_ids'] ?? []);
-            });
-        }
-        $recipients = $recipientQuery->get();
-
+        $recipients = $this->resolveRecipients($data);
         $data['recipient_count'] = $recipients->count();
-        $data['status'] = 'sent';
-        $data['sent_at'] = now();
 
+        if ($recipients->isEmpty()) {
+            return $this->error('No recipients matched. Check the audience selection.', 422);
+        }
+
+        // Insert as queued first; we update with the real outcome after the
+        // delivery loop finishes so the row never claims "sent" before the
+        // mailer has actually been called.
+        $data['status']  = 'queued';
+        $data['sent_at'] = null;
         $email = Email::create($data);
 
-        // Send emails (queued if queue driver configured)
+        $delivered = 0;
+        $failed    = 0;
+        $firstError = null;
+
         foreach ($recipients as $recipient) {
             try {
                 Mail::raw($data['body'], function ($message) use ($recipient, $data) {
                     $message->to($recipient->email)
                             ->subject($data['subject']);
                 });
-            } catch (\Exception $e) {
-                // Log failure but don't abort — partial delivery is acceptable
-                \Log::warning("Email delivery failed for {$recipient->email}: {$e->getMessage()}");
+                $delivered++;
+            } catch (\Throwable $e) {
+                $failed++;
+                $firstError ??= $e->getMessage();
+                Log::warning("Email delivery failed for {$recipient->email}: {$e->getMessage()}");
             }
         }
+
+        $status = match (true) {
+            $delivered === 0                 => 'failed',
+            $failed === 0                    => 'delivered',
+            default                          => 'partial',
+        };
+
+        $email->update([
+            'delivered_count' => $delivered,
+            'failed_count'    => $failed,
+            'error_message'   => $firstError,
+            'status'          => $status,
+            'sent_at'         => $delivered > 0 ? now() : null,
+        ]);
 
         AuditLog::record(
             auth()->id(),
@@ -94,12 +111,38 @@ class EmailController extends Controller
             'email',
             $email->id,
             null,
-            $email->toApiArray()
+            $email->fresh()->toApiArray()
         );
 
+        $message = match ($status) {
+            'delivered' => "Email delivered to {$delivered} recipient(s)",
+            'partial'   => "Email delivered to {$delivered} of {$recipients->count()} recipients ({$failed} failed)",
+            default     => 'Email could not be delivered to any recipients',
+        };
+        $statusCode = $status === 'failed' ? 502 : 201;
+
         return $this->success([
-            'email' => $email->toApiArray(),
-        ], "Email sent to {$recipients->count()} recipients", 201);
+            'email' => $email->fresh()->toApiArray(),
+        ], $message, $statusCode);
+    }
+
+    /**
+     * Resolve User recipients from the request payload. Centralised so the
+     * resolution rules don't drift between this controller and SmsController.
+     */
+    private function resolveRecipients(array $data)
+    {
+        $query = User::whereNotNull('email')->where('email', '!=', '');
+
+        if ($data['audience'] === 'individual') {
+            $query->whereIn('id', $data['recipient_ids'] ?? []);
+        } elseif ($data['audience'] === 'department') {
+            $query->whereHas('employee', function ($q) use ($data) {
+                $q->whereIn('department_id', $data['department_ids'] ?? []);
+            });
+        }
+
+        return $query->get();
     }
 
     public function destroy(string $id): JsonResponse

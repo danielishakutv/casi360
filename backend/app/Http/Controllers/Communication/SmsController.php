@@ -54,43 +54,75 @@ class SmsController extends Controller
 
     public function store(StoreSmsRequest $request): JsonResponse
     {
-        $data = $request->validated();
-        $data['sent_by'] = auth()->id();
+        // Gate: refuse to pretend we sent anything when no SMS gateway is
+        // configured. Once an integration ships, this guard goes away.
+        $driver = config('services.sms.driver');
+        if (empty($driver)) {
+            return $this->error(
+                'SMS sending is not configured. Ask your administrator to set SMS_DRIVER in the server environment.',
+                503
+            );
+        }
 
-        // Resolve recipients
-        $recipientQuery = User::whereNotNull('id');
+        // We have a configured driver but no implementation has shipped
+        // yet — fail loudly so the UI doesn't display a fake success.
+        return $this->error(
+            "SMS driver '{$driver}' is configured but no implementation is wired in this build. Contact support.",
+            501
+        );
+
+        /*
+         * IMPLEMENTATION NOTE — to be enabled per-driver:
+         *
+         * $data = $request->validated();
+         * $data['sent_by'] = auth()->id();
+         * $recipients = $this->resolveRecipients($data);
+         * $data['recipient_count'] = $recipients->count();
+         * $data['status']  = 'queued';
+         * $sms = SmsMessage::create($data);
+         *
+         * $delivered = 0; $failed = 0; $firstError = null;
+         * foreach ($recipients as $recipient) {
+         *     $phone = $recipient->employee?->phone;
+         *     if (!$phone) { $failed++; continue; }
+         *     try {
+         *         app(\App\Services\Communication\SmsGateway::class)
+         *             ->send($phone, $data['message']);
+         *         $delivered++;
+         *     } catch (\Throwable $e) {
+         *         $failed++; $firstError ??= $e->getMessage();
+         *     }
+         * }
+         *
+         * $sms->update([
+         *     'delivered_count' => $delivered,
+         *     'failed_count'    => $failed,
+         *     'error_message'   => $firstError,
+         *     'status'          => $delivered === 0 ? 'failed' : ($failed === 0 ? 'delivered' : 'partial'),
+         *     'sent_at'         => $delivered > 0 ? now() : null,
+         * ]);
+         */
+    }
+
+    /**
+     * Resolve User recipients from the request payload (mirrors EmailController).
+     * Reserved for future use when an SMS driver is wired.
+     *
+     * @phpstan-ignore-next-line method.unused
+     */
+    private function resolveRecipients(array $data)
+    {
+        $query = User::whereHas('employee', fn ($q) => $q->whereNotNull('phone'));
+
         if ($data['audience'] === 'individual') {
-            $recipientQuery->whereIn('id', $data['recipient_ids'] ?? []);
+            $query->whereIn('id', $data['recipient_ids'] ?? []);
         } elseif ($data['audience'] === 'department') {
-            $recipientQuery->whereHas('employee', function ($q) use ($data) {
+            $query->whereHas('employee', function ($q) use ($data) {
                 $q->whereIn('department_id', $data['department_ids'] ?? []);
             });
         }
-        $recipients = $recipientQuery->get();
 
-        $data['recipient_count'] = $recipients->count();
-        $data['status'] = 'sent';
-        $data['sent_at'] = now();
-
-        $sms = SmsMessage::create($data);
-
-        // SMS gateway integration placeholder
-        // Configure in .env: SMS_DRIVER=termii|twilio|africastalking
-        // Each recipient's phone can be fetched via $recipient->employee->phone
-        // Actual sending would be dispatched as a queued job
-
-        AuditLog::record(
-            auth()->id(),
-            'sms_sent',
-            'sms',
-            $sms->id,
-            null,
-            $sms->toApiArray()
-        );
-
-        return $this->success([
-            'sms' => $sms->toApiArray(),
-        ], "SMS queued for {$recipients->count()} recipients", 201);
+        return $query->get();
     }
 
     public function destroy(string $id): JsonResponse
