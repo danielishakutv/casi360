@@ -10,6 +10,7 @@ use App\Models\Requisition;
 use App\Models\Rfq;
 use App\Models\RfqItem;
 use App\Services\Procurement\ApprovalAuthorizer;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class RfqController extends Controller
     public function __construct(
         private ApprovalAuthorizer $authorizer,
         private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
     ) {
     }
 
@@ -154,7 +156,10 @@ class RfqController extends Controller
         $rfq = Rfq::with(['vendor', 'items'])->findOrFail($id);
 
         return $this->success([
-            'rfq' => $rfq->toDetailArray(),
+            'rfq' => array_merge(
+                $rfq->toDetailArray(),
+                ['chain' => $this->chainResolver->forRfq($rfq)]
+            ),
         ]);
     }
 

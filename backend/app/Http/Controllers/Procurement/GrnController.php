@@ -8,6 +8,7 @@ use App\Http\Requests\Procurement\UpdateGrnRequest;
 use App\Models\AuditLog;
 use App\Models\Grn;
 use App\Models\GrnItem;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,10 @@ use Illuminate\Support\Facades\DB;
 
 class GrnController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
+    ) {
     }
 
     /**
@@ -127,7 +130,10 @@ class GrnController extends Controller
         $grn = Grn::with(['vendor', 'items'])->findOrFail($id);
 
         return $this->success([
-            'grn' => $grn->toDetailArray(),
+            'grn' => array_merge(
+                $grn->toDetailArray(),
+                ['chain' => $this->chainResolver->forGrn($grn)]
+            ),
         ]);
     }
 

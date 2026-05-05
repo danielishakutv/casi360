@@ -9,6 +9,7 @@ use App\Http\Requests\Procurement\UpdateInvoiceRequest;
 use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\PurchaseOrder;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
+    ) {
     }
 
     /**
@@ -131,7 +134,10 @@ class InvoiceController extends Controller
             ->findOrFail($id);
 
         return $this->success([
-            'invoice' => $invoice->toDetailArray(),
+            'invoice' => array_merge(
+                $invoice->toDetailArray(),
+                ['chain' => $this->chainResolver->forInvoice($invoice)]
+            ),
         ]);
     }
 

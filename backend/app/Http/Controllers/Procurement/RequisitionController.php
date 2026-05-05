@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,10 @@ use Illuminate\Support\Facades\DB;
 
 class RequisitionController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
+    ) {
     }
 
     /**
@@ -178,7 +181,10 @@ class RequisitionController extends Controller
         ])->findOrFail($id);
 
         return $this->success([
-            'requisition' => $requisition->toDetailArray(),
+            'requisition' => array_merge(
+                $requisition->toDetailArray(),
+                ['chain' => $this->chainResolver->forRequisition($requisition)]
+            ),
         ]);
     }
 

@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Rfp;
 use App\Models\RfpItem;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\DB;
 
 class RfpController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
+    ) {
     }
 
     /**
@@ -160,10 +163,13 @@ class RfpController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $rfp = Rfp::with(['vendor', 'items'])->findOrFail($id);
+        $rfp = Rfp::with(['vendor', 'items', 'invoice'])->findOrFail($id);
 
         return $this->success([
-            'rfp' => $rfp->toDetailArray(),
+            'rfp' => array_merge(
+                $rfp->toDetailArray(),
+                ['chain' => $this->chainResolver->forRfp($rfp)]
+            ),
         ]);
     }
 

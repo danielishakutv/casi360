@@ -8,6 +8,7 @@ use App\Http\Requests\Procurement\UpdatePurchaseOrderRequest;
 use App\Models\AuditLog;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,10 @@ use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private DocumentChainResolver $chainResolver,
+    ) {
     }
 
     /**
@@ -145,7 +148,10 @@ class PurchaseOrderController extends Controller
         ])->findOrFail($id);
 
         return $this->success([
-            'purchase_order' => $order->toDetailArray(),
+            'purchase_order' => array_merge(
+                $order->toDetailArray(),
+                ['chain' => $this->chainResolver->forPurchaseOrder($order)]
+            ),
         ]);
     }
 
