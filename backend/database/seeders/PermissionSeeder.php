@@ -143,6 +143,7 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'grn', 'action' => 'create', 'description' => 'Create goods received notes'],
             ['module' => 'procurement', 'feature' => 'grn', 'action' => 'edit', 'description' => 'Edit goods received notes'],
             ['module' => 'procurement', 'feature' => 'grn', 'action' => 'delete', 'description' => 'Delete goods received notes'],
+            ['module' => 'procurement', 'feature' => 'grn', 'action' => 'confirm', 'description' => 'Confirm, partially accept, or reject goods received notes (budget-holder stage)'],
             ['module' => 'procurement', 'feature' => 'grn', 'action' => 'view_all', 'description' => 'See every goods received note in the organisation, not just records that concern this user'],
 
             // --- Procurement: RFP ---
@@ -323,6 +324,7 @@ class PermissionSeeder extends Seeder
                 'procurement.grn.create' => true,
                 'procurement.grn.edit' => true,
                 'procurement.grn.delete' => true,
+                'procurement.grn.confirm' => true,
                 'procurement.grn.view_all' => true,
                 'procurement.rfp.view' => true,
                 'procurement.rfp.create' => true,
@@ -467,6 +469,7 @@ class PermissionSeeder extends Seeder
                 'procurement.grn.create' => true,
                 'procurement.grn.edit' => true,
                 'procurement.grn.delete' => false,
+                'procurement.grn.confirm' => true,
                 'procurement.grn.view_all' => false,
                 'procurement.rfp.view' => true,
                 'procurement.rfp.create' => true,
@@ -610,6 +613,7 @@ class PermissionSeeder extends Seeder
                 'procurement.grn.create' => false,
                 'procurement.grn.edit' => false,
                 'procurement.grn.delete' => false,
+                'procurement.grn.confirm' => false,
                 'procurement.grn.view_all' => false,
                 'procurement.rfp.view' => true,
                 'procurement.rfp.create' => false,

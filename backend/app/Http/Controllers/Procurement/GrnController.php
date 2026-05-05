@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Procurement\ProcessGrnConfirmationRequest;
 use App\Http\Requests\Procurement\StoreGrnRequest;
 use App\Http\Requests\Procurement\UpdateGrnRequest;
 use App\Models\AuditLog;
@@ -144,8 +145,8 @@ class GrnController extends Controller
     {
         $grn = Grn::with(['vendor', 'items'])->findOrFail($id);
 
-        if (!in_array($grn->status, ['draft', 'inspected', 'partial'])) {
-            return $this->error('Only draft, inspected or partial GRNs can be edited.', 422);
+        if ($grn->status !== 'draft') {
+            return $this->error('Only draft GRNs can be edited. Submitted GRNs are locked until the budget holder accepts or rejects them.', 422);
         }
 
         $oldValues = $grn->toApiArray();
@@ -228,6 +229,109 @@ class GrnController extends Controller
             );
 
             return $this->success(null, 'GRN deleted successfully');
+        });
+    }
+
+    /**
+     * POST /api/v1/procurement/grn/{id}/submit
+     *
+     * Receiver hands the GRN to the budget holder for confirmation. Only
+     * draft GRNs may be submitted; the row is then locked from edits
+     * until the confirmer accepts, partially-accepts, or rejects it.
+     */
+    public function submit(Request $request, string $id): JsonResponse
+    {
+        $grn = Grn::findOrFail($id);
+
+        if ($grn->status !== 'draft') {
+            return $this->error('Only draft GRNs can be submitted for confirmation.', 422);
+        }
+
+        $oldValues = $grn->toApiArray();
+
+        return DB::transaction(function () use ($request, $grn, $oldValues) {
+            $grn->update([
+                'status'       => 'pending_inspection',
+                'submitted_at' => now(),
+            ]);
+
+            AuditLog::record(
+                $request->user()?->id,
+                'grn_submitted',
+                'grn',
+                $grn->id,
+                $oldValues,
+                $grn->fresh()->toApiArray()
+            );
+
+            return $this->success([
+                'grn' => $grn->fresh()->load(['vendor', 'items'])->toDetailArray(),
+            ], 'GRN submitted for budget-holder confirmation');
+        });
+    }
+
+    /**
+     * PATCH /api/v1/procurement/grn/{id}/confirmation
+     *
+     * Budget-holder stage of dual-confirmation. Three terminal outcomes:
+     *   - accept  → status `accepted`
+     *   - partial → status `partial`  (notes required)
+     *   - reject  → status `rejected` (notes required)
+     *
+     * Only GRNs in `pending_inspection` may be confirmed. Notes are
+     * persisted in confirmation_notes; the actor + timestamp are
+     * captured in confirmed_by / confirmed_at for audit and display.
+     */
+    public function processConfirmation(ProcessGrnConfirmationRequest $request, string $id): JsonResponse
+    {
+        $grn = Grn::findOrFail($id);
+
+        if ($grn->status !== 'pending_inspection') {
+            return $this->error('Only GRNs awaiting confirmation can be accepted or rejected.', 422);
+        }
+
+        $data = $request->validated();
+        $oldValues = $grn->toApiArray();
+        $user = $request->user();
+        $now = now();
+
+        return DB::transaction(function () use ($grn, $data, $oldValues, $user, $now) {
+            $newStatus = match ($data['action']) {
+                'accept'  => 'accepted',
+                'partial' => 'partial',
+                'reject'  => 'rejected',
+            };
+
+            $grn->update([
+                'status'             => $newStatus,
+                'confirmed_by'       => $user?->id,
+                'confirmed_at'       => $now,
+                'confirmation_notes' => $data['notes'] ?? null,
+            ]);
+
+            $action = match ($data['action']) {
+                'accept'  => 'grn_accepted',
+                'partial' => 'grn_partial',
+                'reject'  => 'grn_rejected',
+            };
+            $message = match ($data['action']) {
+                'accept'  => 'GRN accepted',
+                'partial' => 'GRN partially accepted',
+                'reject'  => 'GRN rejected',
+            };
+
+            AuditLog::record(
+                $user?->id,
+                $action,
+                'grn',
+                $grn->id,
+                $oldValues,
+                $grn->fresh()->toApiArray()
+            );
+
+            return $this->success([
+                'grn' => $grn->fresh()->load(['vendor', 'items'])->toDetailArray(),
+            ], $message);
         });
     }
 }

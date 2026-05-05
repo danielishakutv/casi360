@@ -23,11 +23,17 @@ class Grn extends Model
         'delivery_note_no',
         'notes',
         'signoffs',
+        'submitted_at',
+        'confirmed_by',
+        'confirmed_at',
+        'confirmation_notes',
     ];
 
     protected $casts = [
         'received_date' => 'date',
-        'signoffs' => 'array',
+        'submitted_at'  => 'datetime',
+        'confirmed_at'  => 'datetime',
+        'signoffs'      => 'array',
     ];
 
     /* ----------------------------------------------------------------
@@ -42,6 +48,11 @@ class Grn extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function confirmer()
+    {
+        return $this->belongsTo(User::class, 'confirmed_by');
     }
 
     public function items()
@@ -93,6 +104,11 @@ class Grn extends Model
             'notes' => $this->notes,
             'signoffs' => $this->signoffs,
             'item_count' => $this->items()->count(),
+            'submitted_at'        => $this->submitted_at?->toIso8601String(),
+            'confirmed_by'        => $this->confirmed_by,
+            'confirmed_by_name'   => $this->confirmer?->name,
+            'confirmed_at'        => $this->confirmed_at?->toIso8601String(),
+            'confirmation_notes'  => $this->confirmation_notes,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

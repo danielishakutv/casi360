@@ -648,6 +648,14 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::delete('/grn/{id}', [GrnController::class, 'destroy'])
                 ->middleware(PermissionMiddleware::class . ':procurement.grn.delete')
                 ->name('procurement.grn.destroy');
+
+            // Dual-confirmation: receiver submits → budget holder accepts/rejects
+            Route::post('/grn/{id}/submit', [GrnController::class, 'submit'])
+                ->middleware(PermissionMiddleware::class . ':procurement.grn.edit')
+                ->name('procurement.grn.submit');
+            Route::patch('/grn/{id}/confirmation', [GrnController::class, 'processConfirmation'])
+                ->middleware(PermissionMiddleware::class . ':procurement.grn.confirm')
+                ->name('procurement.grn.confirmation');
         });
 
         // --- RFP (Request for Payment) ---
