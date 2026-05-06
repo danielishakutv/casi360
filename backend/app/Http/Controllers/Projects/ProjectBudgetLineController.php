@@ -228,4 +228,23 @@ class ProjectBudgetLineController extends Controller
     {
         return trim(strtolower((string) $projectCode)) . '||' . trim(strtolower((string) $budgetLine));
     }
+
+    /**
+     * Map a utilization percentage to a status label. Mirrors the thresholds
+     * used in FinanceReportController so the project module and finance
+     * module agree on what "critical" / "low" mean for a budget line.
+     */
+    private function deriveBudgetLineStatus(float $utilization): string
+    {
+        if ($utilization > 100) {
+            return 'overdrawn';
+        }
+        if ($utilization >= 90) {
+            return 'critical';
+        }
+        if ($utilization >= 70) {
+            return 'low';
+        }
+        return 'healthy';
+    }
 }
