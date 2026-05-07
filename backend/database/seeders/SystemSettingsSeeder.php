@@ -306,6 +306,32 @@ class SystemSettingsSeeder extends Seeder
 
             /*
             |------------------------------------------------------------------
+            | Notifications
+            |------------------------------------------------------------------
+            */
+            [ 'group' => 'notifications', 'key' => 'notifications_email_alerts',    'value' => '1', 'type' => 'boolean', 'label' => 'Email Alerts',         'description' => 'Send important notifications by email.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_sms_alerts',      'value' => '0', 'type' => 'boolean', 'label' => 'SMS Alerts',           'description' => 'Send notifications by SMS (requires SMS gateway).', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_push',            'value' => '1', 'type' => 'boolean', 'label' => 'Push Notifications',   'description' => 'Browser push notifications when the app is open.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_weekly_digest',   'value' => '1', 'type' => 'boolean', 'label' => 'Weekly Digest',        'description' => 'Email summary of activity every Monday.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_mention_alerts',  'value' => '1', 'type' => 'boolean', 'label' => 'Mention Alerts',       'description' => 'Notify when someone mentions you.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_approval_alerts', 'value' => '1', 'type' => 'boolean', 'label' => 'Approval Requests',    'description' => 'Notify when an item needs your approval.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_system_updates',  'value' => '0', 'type' => 'boolean', 'label' => 'System Updates',       'description' => 'Platform updates and maintenance notices.', 'is_public' => false ],
+            [ 'group' => 'notifications', 'key' => 'notifications_security_alerts', 'value' => '1', 'type' => 'boolean', 'label' => 'Security Alerts',      'description' => 'Suspicious activity, failed logins, role changes.', 'is_public' => false ],
+
+            /*
+            |------------------------------------------------------------------
+            | Security (the session_lifetime_minutes / max_login_attempts
+            | rows live in the system group above; these are the extras
+            | the /settings page's Security tab exposes.)
+            |------------------------------------------------------------------
+            */
+            [ 'group' => 'security', 'key' => 'security_two_factor',       'value' => '0',  'type' => 'boolean', 'label' => 'Two-Factor Authentication', 'description' => 'Require a second verification step on login.', 'is_public' => false ],
+            [ 'group' => 'security', 'key' => 'security_password_expiry',  'value' => '90', 'type' => 'integer', 'label' => 'Password Expiry (days)',    'description' => 'Force password reset after this many days. 0 = never.', 'is_public' => false ],
+            [ 'group' => 'security', 'key' => 'security_ip_whitelist',     'value' => null, 'type' => 'string',  'label' => 'IP Whitelist',              'description' => 'Comma-separated CIDR ranges allowed to sign in. Leave blank for unrestricted.', 'is_public' => false ],
+            [ 'group' => 'security', 'key' => 'security_strong_passwords', 'value' => '1',  'type' => 'boolean', 'label' => 'Enforce Strong Passwords',  'description' => 'Min 8 chars with uppercase, number, and special character.', 'is_public' => false ],
+
+            /*
+            |------------------------------------------------------------------
             | Procurement
             |------------------------------------------------------------------
             */
