@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\HRSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -36,9 +37,11 @@ use Illuminate\Support\Facades\Schema;
  */
 class ResetDataCommand extends Command
 {
-    protected $signature = 'app:reset-data {--force : Skip the confirmation prompt}';
+    protected $signature = 'app:reset-data
+        {--force : Skip the confirmation prompt}
+        {--no-defaults : Skip re-seeding the HR defaults (departments + designations) after the wipe}';
 
-    protected $description = 'Wipe all business data, keeping super_admin users + permissions + system_settings.';
+    protected $description = 'Wipe all business data, keeping super_admin users + permissions + system_settings. Re-seeds HR defaults unless --no-defaults is passed.';
 
     /**
      * Tables wiped on reset, in any order — foreign-key checks are
@@ -186,6 +189,17 @@ class ResetDataCommand extends Command
             $this->newLine();
             $this->info("Reset complete. Total business rows wiped: {$totalWiped}.");
             $this->info("Super admin user(s) preserved: {$superAdminCount}.");
+
+            // ── Re-seed HR defaults so the system is testable immediately
+            if (!$this->option('no-defaults')) {
+                $this->newLine();
+                $this->info('Re-seeding HR defaults (departments + designations)…');
+                $this->call('db:seed', [
+                    '--class' => HRSeeder::class,
+                    '--force' => true,
+                ]);
+            }
+
             $this->newLine();
             $this->line('Recommended next steps:');
             $this->line('  • php artisan optimize:clear      (drop cached config / routes)');
