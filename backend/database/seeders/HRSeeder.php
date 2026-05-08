@@ -43,12 +43,25 @@ class HRSeeder extends Seeder
             ['code' => 'COMMS',       'name' => 'Communications',           'description' => 'Public relations, media, and donor communications.',          'color' => '#EAB308'],
         ];
 
+        // Lookup is in two stages so legacy data plays nicely:
+        //   1) By `code` — the canonical, workflow-critical key.
+        //   2) By `name` — covers rows created manually through the HR UI
+        //      before this seeder existed, which won't have a code yet
+        //      and would otherwise trip the unique-name constraint.
+        // If a name-only match is found, the seeder backfills its code.
         $deptIdByCode = [];
         foreach ($departments as $dept) {
-            $row = Department::updateOrCreate(
-                ['code' => $dept['code']],
-                array_merge($dept, ['head' => null, 'status' => 'active'])
-            );
+            $row = Department::where('code', $dept['code'])->first()
+                ?? Department::where('name', $dept['name'])->first();
+
+            $payload = array_merge($dept, ['status' => 'active']);
+            if ($row) {
+                // Don't overwrite an admin-set head with null on re-seed.
+                $row->fill($payload)->save();
+            } else {
+                $row = Department::create(array_merge($payload, ['head' => null]));
+            }
+
             $deptIdByCode[$dept['code']] = $row->id;
         }
 
