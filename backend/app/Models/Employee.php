@@ -11,6 +11,7 @@ class Employee extends Model
     use HasUuids, HasFactory;
 
     protected $fillable = [
+        'user_id',
         'staff_id',
         'name',
         'email',
@@ -73,6 +74,30 @@ class Employee extends Model
         return $this->belongsTo(Designation::class);
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /* ----------------------------------------------------------------
+     * Staff ID generator
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Pick the next CASI-NNNN id by reading the highest currently in the
+     * table. Matches the seeder convention so the numbering stays unified
+     * regardless of where the row was created (HR module, user-creation
+     * hook, or seeder).
+     */
+    public static function generateStaffId(): string
+    {
+        $last = self::where('staff_id', 'like', 'CASI-%')
+            ->orderByDesc('staff_id')
+            ->value('staff_id');
+        $lastNum = $last ? (int) substr($last, 5) : 1000;
+        return 'CASI-' . str_pad($lastNum + 1, 4, '0', STR_PAD_LEFT);
+    }
+
     /* ----------------------------------------------------------------
      * Serialization
      * ---------------------------------------------------------------- */
@@ -81,6 +106,7 @@ class Employee extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'staff_id' => $this->staff_id,
             'name' => $this->name,
             'email' => $this->email,

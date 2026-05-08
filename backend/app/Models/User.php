@@ -40,6 +40,20 @@ class User extends Authenticatable
     ];
 
     /**
+     * Auto-create the matching HR employee row whenever a user is
+     * created (registration form, admin user-management UI, seeders,
+     * factories — every path). The hook is idempotent: if an employee
+     * already exists for this email it links the existing row instead
+     * of creating a duplicate.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (User $user) {
+            $user->ensureEmployeeRecord();
+        });
+    }
+
+    /**
      * The attributes that should be cast.
      */
     protected function casts(): array
@@ -96,13 +110,13 @@ class User extends Authenticatable
     }
 
     /**
-     * Employee record linked by email (users and employees share email as the
-     * bridge since there is no FK). Used by approval authorisation to resolve
-     * whether the authenticated user is a project manager.
+     * The HR employee record for this user. Linked via the user_id FK
+     * added in migration 0071 — survives email changes and is
+     * guaranteed to exist by the booted() auto-create hook below.
      */
     public function employee()
     {
-        return $this->hasOne(Employee::class, 'email', 'email');
+        return $this->hasOne(Employee::class, 'user_id');
     }
 
     /* ----------------------------------------------------------------
@@ -123,6 +137,43 @@ class User extends Authenticatable
     public function hasAnyRole(array $roles): bool
     {
         return in_array($this->role, $roles);
+    }
+
+    /**
+     * Make sure this user has a matching HR employee row. Idempotent:
+     *   - If one already exists with this user_id, returns it.
+     *   - If a row with the same email exists, links it back to this
+     *     user (covers the "imported employees, then created users"
+     *     ordering as well as legacy data with no FK).
+     *   - Otherwise creates a fresh employee with the user's name,
+     *     email, phone, and a sensible default status. department_id
+     *     and designation_id stay null — HR fills them in later.
+     *
+     * Called by the booted() hook on creation and by ResetDataCommand
+     * after a wipe.
+     */
+    public function ensureEmployeeRecord(): Employee
+    {
+        $existing = Employee::where('user_id', $this->id)->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        $byEmail = Employee::where('email', $this->email)->first();
+        if ($byEmail) {
+            $byEmail->update(['user_id' => $this->id]);
+            return $byEmail->fresh();
+        }
+
+        return Employee::create([
+            'user_id'   => $this->id,
+            'staff_id'  => Employee::generateStaffId(),
+            'name'      => $this->name,
+            'email'     => $this->email,
+            'phone'     => $this->phone,
+            'status'    => $this->status === 'active' ? 'active' : 'terminated',
+            'join_date' => now()->toDateString(),
+        ]);
     }
 
     /**

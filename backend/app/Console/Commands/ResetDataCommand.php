@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\User;
 use Database\Seeders\HRSeeder;
 use Database\Seeders\ProcurementDefaultsSeeder;
 use Database\Seeders\ProjectDefaultsSeeder;
@@ -203,6 +204,18 @@ class ResetDataCommand extends Command
                     ]);
                 }
             }
+
+            // ── Make sure every surviving user has a matching HR employee
+            //    row. The wipe drops the employees table, so the super admin
+            //    needs their record rebuilt before anyone signs in.
+            $this->newLine();
+            $this->info('Ensuring every user has a matching employee record…');
+            $linked = 0;
+            User::all()->each(function (User $user) use (&$linked) {
+                $user->ensureEmployeeRecord();
+                $linked++;
+            });
+            $this->line("  [ok] linked {$linked} user(s) to employee records");
 
             $this->newLine();
             $this->line('Recommended next steps:');
