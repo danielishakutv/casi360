@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Department;
 use App\Models\Designation;
+use App\Models\LeaveType;
 use Illuminate\Database\Seeder;
 
 /**
@@ -121,8 +122,29 @@ class HRSeeder extends Seeder
             $created++;
         }
 
+        // ── Leave Types ──────────────────────────────────────────
+        // Standard leave-type catalog every NGO needs from day one.
+        // Days are sensible Nigerian-employment defaults; admins can
+        // edit them via the HR module without touching the seed.
+        $leaveTypes = [
+            ['name' => 'Annual Leave',       'days_allowed' => 21, 'carry_over_max' => 5,  'paid' => true,  'requires_approval' => true,  'description' => 'Standard annual paid leave.'],
+            ['name' => 'Sick Leave',         'days_allowed' => 14, 'carry_over_max' => 0,  'paid' => true,  'requires_approval' => true,  'description' => 'Paid time off for illness; medical note may be requested.'],
+            ['name' => 'Maternity Leave',    'days_allowed' => 84, 'carry_over_max' => 0,  'paid' => true,  'requires_approval' => true,  'description' => 'Twelve-week paid maternity leave.'],
+            ['name' => 'Paternity Leave',    'days_allowed' => 14, 'carry_over_max' => 0,  'paid' => true,  'requires_approval' => true,  'description' => 'Two-week paid paternity leave.'],
+            ['name' => 'Compassionate Leave','days_allowed' => 5,  'carry_over_max' => 0,  'paid' => true,  'requires_approval' => true,  'description' => 'Bereavement and family-emergency leave.'],
+            ['name' => 'Study Leave',        'days_allowed' => 10, 'carry_over_max' => 0,  'paid' => true,  'requires_approval' => true,  'description' => 'For exams, courses, or approved study.'],
+            ['name' => 'Unpaid Leave',       'days_allowed' => 30, 'carry_over_max' => 0,  'paid' => false, 'requires_approval' => true,  'description' => 'Discretionary unpaid leave.'],
+        ];
+
+        foreach ($leaveTypes as $lt) {
+            LeaveType::updateOrCreate(
+                ['name' => $lt['name']],
+                array_merge($lt, ['status' => 'active'])
+            );
+        }
+
         $this->command?->info(
-            'HR defaults seeded: ' . count($departments) . ' departments, ' . $created . ' designations.'
+            'HR defaults seeded: ' . count($departments) . ' departments, ' . $created . ' designations, ' . count($leaveTypes) . ' leave types.'
         );
     }
 }

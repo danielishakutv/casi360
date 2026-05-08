@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use Database\Seeders\HRSeeder;
+use Database\Seeders\ProcurementDefaultsSeeder;
+use Database\Seeders\ProjectDefaultsSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -190,14 +192,16 @@ class ResetDataCommand extends Command
             $this->info("Reset complete. Total business rows wiped: {$totalWiped}.");
             $this->info("Super admin user(s) preserved: {$superAdminCount}.");
 
-            // ── Re-seed HR defaults so the system is testable immediately
+            // ── Re-seed structural defaults so the system is testable immediately
             if (!$this->option('no-defaults')) {
                 $this->newLine();
-                $this->info('Re-seeding HR defaults (departments + designations)…');
-                $this->call('db:seed', [
-                    '--class' => HRSeeder::class,
-                    '--force' => true,
-                ]);
+                $this->info('Re-seeding structural defaults…');
+                foreach ([HRSeeder::class, ProcurementDefaultsSeeder::class, ProjectDefaultsSeeder::class] as $seeder) {
+                    $this->call('db:seed', [
+                        '--class' => $seeder,
+                        '--force' => true,
+                    ]);
+                }
             }
 
             $this->newLine();
