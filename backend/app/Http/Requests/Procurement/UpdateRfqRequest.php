@@ -27,7 +27,7 @@ class UpdateRfqRequest extends FormRequest
             'supplier_phone' => ['nullable', 'string', 'max:50'],
             'supplier_email' => ['nullable', 'email', 'max:255'],
             'contact_person' => ['nullable', 'string', 'max:255'],
-            'status' => ['nullable', 'in:draft,sent,received,evaluated,cancelled'],
+            'status' => ['nullable', 'in:draft,open,closed,awarded,cancelled'],
             'issue_date' => ['nullable', 'date'],
             'deadline' => ['nullable', 'date'],
             'delivery_address' => ['nullable', 'string', 'max:500'],

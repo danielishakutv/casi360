@@ -114,7 +114,10 @@ class RfqController extends Controller
             unset($data['items']);
 
             $data['rfq_number'] = Rfq::generateRfqNumber();
-            $data['status'] = $data['status'] ?? 'draft';
+            // RFQs land in 'open' state by default — once the form is
+            // saved, the document is ready to be downloaded and sent to
+            // vendors. Drafts remain available if the caller asks for one.
+            $data['status'] = $data['status'] ?? 'open';
             $data['created_by'] = $request->user()->id;
 
             $rfq = Rfq::create($data);
