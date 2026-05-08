@@ -15,6 +15,19 @@ use Illuminate\Support\Facades\Hash;
 class UserManagementController extends Controller
 {
     /**
+     * The password every user is reset to when an admin clicks the
+     * "Reset Password" action. Stable, easy to communicate, and paired
+     * with force_password_change=true so the user must replace it on
+     * their next login. Override via APP_DEFAULT_USER_PASSWORD if a
+     * deployment wants something organisation-specific.
+     */
+    private function defaultPassword(): string
+    {
+        return (string) (env('APP_DEFAULT_USER_PASSWORD') ?: 'Casi360@Reset');
+    }
+
+
+    /**
      * GET /api/v1/auth/users
      * 
      * List all users (admin only). Paginated.
@@ -161,6 +174,56 @@ class UserManagementController extends Controller
             return $this->success([
                 'user' => $user->fresh()->toAuthArray(),
             ], "User role updated from {$oldRole} to {$request->role}");
+        });
+    }
+
+    /**
+     * POST /api/v1/auth/users/{id}/reset-password
+     *
+     * Reset a user's password to the platform default and force them
+     * to choose a new one on next login. Returns the default password
+     * in the response so the admin can read it out to the user.
+     *
+     * Guards:
+     *   - Cannot reset your own password (use the profile flow).
+     *   - A super_admin's password can only be reset by another super_admin
+     *     — admins shouldn't be able to lock super admins out.
+     */
+    public function resetPassword(string $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        $actor = auth()->user();
+
+        if ($user->id === $actor->id) {
+            return $this->error('Use Change Password from your profile to reset your own password.', 403);
+        }
+
+        if ($user->is_super_admin && !$actor->is_super_admin) {
+            return $this->error('Only a super admin can reset another super admin\'s password.', 403);
+        }
+
+        $defaultPassword = $this->defaultPassword();
+
+        return DB::transaction(function () use ($user, $actor, $defaultPassword) {
+            $user->update([
+                'password'              => Hash::make($defaultPassword),
+                'force_password_change' => true,
+                'password_changed_at'   => null,
+            ]);
+
+            AuditLog::record(
+                $actor->id,
+                'user_password_reset',
+                'user',
+                $user->id,
+                null,
+                ['force_password_change' => true]
+            );
+
+            return $this->success([
+                'user'             => $user->fresh()->toAuthArray(),
+                'default_password' => $defaultPassword,
+            ], 'Password reset. The user must change it on next login.');
         });
     }
 

@@ -30,6 +30,7 @@
  *   DELETE /api/v1/auth/users/{id}          - Deactivate user
  *   PATCH  /api/v1/auth/users/{id}/role     - Change user role
  *   PATCH  /api/v1/auth/users/{id}/status   - Change user status
+ *   POST   /api/v1/auth/users/{id}/reset-password - Reset to default + force change
  */
 
 use App\Http\Controllers\Auth\LoginController;
@@ -162,6 +163,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 Route::delete('/users/{id}', [UserManagementController::class, 'destroy'])->name('auth.users.destroy');
                 Route::patch('/users/{id}/role', [UserManagementController::class, 'updateRole'])->name('auth.users.role');
                 Route::patch('/users/{id}/status', [UserManagementController::class, 'updateStatus'])->name('auth.users.status');
+                Route::post('/users/{id}/reset-password', [UserManagementController::class, 'resetPassword'])->name('auth.users.reset-password');
             });
         });
     });
