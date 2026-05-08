@@ -173,8 +173,8 @@ class RfqController extends Controller
     {
         $rfq = Rfq::with(['vendor', 'items'])->findOrFail($id);
 
-        if (!in_array($rfq->status, ['draft', 'sent', 'received'])) {
-            return $this->error('Only draft, sent or received RFQs can be edited.', 422);
+        if (!in_array($rfq->status, ['draft', 'open', 'closed'])) {
+            return $this->error('Only draft, open or closed RFQs can be edited. Awarded or cancelled RFQs are locked.', 422);
         }
 
         $oldValues = $rfq->toApiArray();
@@ -242,8 +242,8 @@ class RfqController extends Controller
     {
         $rfq = Rfq::findOrFail($id);
 
-        if ($rfq->status === 'evaluated') {
-            return $this->error('Cannot delete an evaluated RFQ.', 422);
+        if ($rfq->status === 'awarded') {
+            return $this->error('Cannot delete an awarded RFQ.', 422);
         }
 
         return DB::transaction(function () use ($rfq, $id) {
@@ -266,10 +266,9 @@ class RfqController extends Controller
     /**
      * POST /api/v1/procurement/rfq/{id}/submit
      *
-     * Transitions a draft RFQ to "sent" — the procurement team has shared the
-     * RFQ with the selected vendor (off-app, via email/print) and the record
-     * should now be tracked as live. Restricted to procurement managers and
-     * admins, same as RFQ creation.
+     * Transitions a draft RFQ to "open" — the document has been finalised
+     * and is ready to be downloaded and shared with the vendor (off-app,
+     * via email/print). Restricted to procurement managers and admins.
      */
     public function submit(string $id): JsonResponse
     {
@@ -284,33 +283,33 @@ class RfqController extends Controller
 
         if ($rfq->status !== 'draft') {
             return $this->error(
-                "Only draft RFQs can be sent to vendors (current status: {$rfq->status}).",
+                "Only draft RFQs can be opened (current status: {$rfq->status}).",
                 422
             );
         }
 
         if ($rfq->items()->count() === 0) {
-            return $this->error('Cannot send an RFQ with no items.', 422);
+            return $this->error('Cannot open an RFQ with no items.', 422);
         }
 
         return DB::transaction(function () use ($rfq) {
             $oldStatus = $rfq->status;
-            $rfq->update(['status' => 'sent']);
+            $rfq->update(['status' => 'open']);
             $rfq->refresh();
             $rfq->load(['vendor', 'items']);
 
             AuditLog::record(
                 auth()->id(),
-                'rfq_sent',
+                'rfq_opened',
                 'rfq',
                 $rfq->id,
                 ['status' => $oldStatus],
-                ['status' => 'sent']
+                ['status' => 'open']
             );
 
             return $this->success([
                 'rfq' => $rfq->toDetailArray(),
-            ], 'RFQ marked as sent to vendor');
+            ], 'RFQ marked as open and ready to share with vendor');
         });
     }
 }
