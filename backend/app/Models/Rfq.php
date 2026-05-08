@@ -129,7 +129,8 @@ class Rfq extends Model
     public function toDetailArray(): array
     {
         return array_merge($this->toApiArray(), [
-            'items' => $this->items->map->toApiArray()->toArray(),
+            'items'     => $this->items->map->toApiArray()->toArray(),
+            'audit_log' => AuditLog::trailFor('rfq', $this->id),
         ]);
     }
 }

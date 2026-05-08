@@ -318,9 +318,22 @@ class Requisition extends Model
 
     public function toDetailArray(): array
     {
+        // The audit-log timeline is included on every detail fetch so the
+        // preview modal and the PDF/CSV exports can render the activity
+        // history (created → submitted → approved by …) without a second
+        // request. Ordered oldest-first so it reads as a timeline.
+        $auditLog = $this->auditLogs()
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get()
+            ->map->toApiArray()
+            ->values()
+            ->toArray();
+
         return array_merge($this->toApiArray(), [
             'items'          => $this->items->map->toApiArray()->toArray(),
             'approval_chain' => $this->getApprovalChainDetailed(),
+            'audit_log'      => $auditLog,
         ]);
     }
 }

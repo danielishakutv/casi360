@@ -125,13 +125,26 @@ class BoqController extends Controller
 
     /**
      * GET /api/v1/procurement/boq/{id}
+     *
+     * Returns the BOQ + line items + the full activity-log timeline so the
+     * detail modal and PDF/CSV exports can render the audit trail without
+     * a second round-trip.
      */
     public function show(string $id): JsonResponse
     {
         $boq = Boq::with('items')->findOrFail($id);
 
+        $auditLog = BoqAuditLog::where('boq_id', $id)
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc')
+            ->get()
+            ->map->toApiArray()
+            ->values();
+
         return $this->success([
-            'boq' => $boq->toDetailArray(),
+            'boq' => array_merge($boq->toDetailArray(), [
+                'audit_log' => $auditLog,
+            ]),
         ]);
     }
 
@@ -318,9 +331,35 @@ class BoqController extends Controller
 
         return DB::transaction(function () use ($boq, $action, $auditAction, $comments, $nextStatus) {
             $fromStatus = $boq->status;
-            $boq->update(['status' => $nextStatus]);
-
             $actor = auth()->user();
+
+            $updates = ['status' => $nextStatus];
+
+            // When the BOQ is approved, capture the approver as the
+            // "budget holder" sign-off so the preview modal and PDF/CSV
+            // exports include their name, role, email and the date —
+            // matching the PREPARED BY / MARKET SURVEY blocks already
+            // captured at creation time.
+            if ($action === 'approve' && $actor) {
+                $existing = is_array($boq->signoffs) ? $boq->signoffs : [];
+                $filtered = array_values(array_filter(
+                    $existing,
+                    fn ($s) => ($s['type'] ?? null) !== 'budget_holder'
+                ));
+                $filtered[] = [
+                    'type'     => 'budget_holder',
+                    'name'     => $actor->name,
+                    'position' => $actor->role
+                        ? ucwords(str_replace('_', ' ', $actor->role))
+                        : null,
+                    'email'    => $actor->email,
+                    'date'     => now()->toDateString(),
+                ];
+                $updates['signoffs'] = $filtered;
+            }
+
+            $boq->update($updates);
+
             BoqAuditLog::write(
                 $boq->id,
                 $actor?->id,

@@ -103,6 +103,7 @@ class Invoice extends Model
     {
         return array_merge($this->toApiArray(), [
             'rfp_count' => $this->rfps()->count(),
+            'audit_log' => AuditLog::trailFor('invoice', $this->id),
         ]);
     }
 }

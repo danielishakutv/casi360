@@ -288,6 +288,7 @@ class PurchaseOrder extends Model
             'items' => $this->items->map->toApiArray()->toArray(),
             'approval_steps' => $this->approvalSteps()->orderBy('step_order')->get()->map->toApiArray()->toArray(),
             'disbursements' => $this->disbursements->map->toApiArray()->toArray(),
+            'audit_log'     => AuditLog::trailFor('purchase_order', $this->id),
         ]);
     }
 }
