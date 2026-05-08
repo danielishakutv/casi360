@@ -27,6 +27,8 @@ class Rfq extends Model
         'supplier_email',
         'contact_person',
         'status',
+        'scope',
+        'advertised_on',
         'issue_date',
         'deadline',
         'delivery_address',
@@ -52,6 +54,16 @@ class Rfq extends Model
     public function vendor()
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Every vendor invited to quote on this RFQ. Targeted RFQs have one
+     * or more rows here; open-call RFQs have none (the recipient set is
+     * "anyone qualified" and only `advertised_on` is captured).
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(Vendor::class, 'rfq_vendors')->withTimestamps();
     }
 
     public function creator()
@@ -92,6 +104,17 @@ class Rfq extends Model
 
     public function toApiArray(): array
     {
+        $vendors = $this->relationLoaded('vendors')
+            ? $this->vendors->map(fn ($v) => [
+                'id' => $v->id,
+                'name' => $v->name,
+                'address' => $v->address,
+                'phone' => $v->phone,
+                'email' => $v->email,
+                'contact_person' => $v->contact_person,
+            ])->values()->toArray()
+            : null;
+
         return [
             'id' => $this->id,
             'rfq_number' => $this->rfq_number,
@@ -105,12 +128,16 @@ class Rfq extends Model
             'request_types' => $this->request_types,
             'vendor_id' => $this->vendor_id,
             'vendor_name' => $this->vendor?->name,
+            'vendors' => $vendors,
+            'vendors_count' => $vendors !== null ? count($vendors) : ($this->vendors_count ?? null),
             'supplier_name' => $this->supplier_name,
             'supplier_address' => $this->supplier_address,
             'supplier_phone' => $this->supplier_phone,
             'supplier_email' => $this->supplier_email,
             'contact_person' => $this->contact_person,
             'status' => $this->status,
+            'scope' => $this->scope ?? 'targeted',
+            'advertised_on' => $this->advertised_on,
             'issue_date' => $this->issue_date?->toDateString(),
             'deadline' => $this->deadline?->toDateString(),
             'delivery_address' => $this->delivery_address,

@@ -30,7 +30,7 @@ class RfqController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Rfq::with('vendor');
+        $query = Rfq::with('vendor')->withCount('vendors');
 
         if ($this->scopeService->shouldScope($request->user(), 'procurement.rfq.view_all', $request)) {
             $this->scopeService->applyToRfqs($query, $request->user());
@@ -113,6 +113,33 @@ class RfqController extends Controller
             $items = $data['items'] ?? [];
             unset($data['items']);
 
+            // Multi-vendor + scope handling. The form sends `vendor_ids` as
+            // the source of truth; `vendor_id` is kept as the "primary"
+            // recipient for backward compatibility with downstream code
+            // (PO creation reads from it).
+            $vendorIds = array_values(array_unique($data['vendor_ids'] ?? []));
+            unset($data['vendor_ids']);
+
+            $scope = $data['scope'] ?? 'targeted';
+            $data['scope'] = $scope;
+
+            if ($scope === 'targeted') {
+                if (empty($vendorIds) && empty($data['vendor_id'] ?? null)) {
+                    return $this->error('Select at least one vendor for a targeted RFQ.', 422);
+                }
+                if (empty($data['vendor_id']) && !empty($vendorIds)) {
+                    $data['vendor_id'] = $vendorIds[0];
+                }
+                // Open-call-only field is irrelevant when targeting vendors.
+                $data['advertised_on'] = null;
+            } else { // open
+                if (!empty($vendorIds)) {
+                    return $this->error('Open-call RFQs do not pin specific vendors. Switch to targeted to pick vendors.', 422);
+                }
+                $data['vendor_id'] = null;
+                $vendorIds = [];
+            }
+
             $data['rfq_number'] = Rfq::generateRfqNumber();
             // RFQs land in 'open' state by default — once the form is
             // saved, the document is ready to be downloaded and sent to
@@ -121,6 +148,10 @@ class RfqController extends Controller
             $data['created_by'] = $request->user()->id;
 
             $rfq = Rfq::create($data);
+
+            if (!empty($vendorIds)) {
+                $rfq->vendors()->sync($vendorIds);
+            }
 
             foreach ($items as $item) {
                 $item['rfq_id'] = $rfq->id;
@@ -134,7 +165,7 @@ class RfqController extends Controller
             }
 
             $rfq->refresh();
-            $rfq->load(['vendor', 'items']);
+            $rfq->load(['vendor', 'vendors', 'items']);
 
             AuditLog::record(
                 auth()->id(),
@@ -156,7 +187,7 @@ class RfqController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $rfq = Rfq::with(['vendor', 'items'])->findOrFail($id);
+        $rfq = Rfq::with(['vendor', 'vendors', 'items'])->findOrFail($id);
 
         return $this->success([
             'rfq' => array_merge(
@@ -171,7 +202,7 @@ class RfqController extends Controller
      */
     public function update(UpdateRfqRequest $request, string $id): JsonResponse
     {
-        $rfq = Rfq::with(['vendor', 'items'])->findOrFail($id);
+        $rfq = Rfq::with(['vendor', 'vendors', 'items'])->findOrFail($id);
 
         if (!in_array($rfq->status, ['draft', 'open', 'closed'])) {
             return $this->error('Only draft, open or closed RFQs can be edited. Awarded or cancelled RFQs are locked.', 422);
@@ -184,7 +215,38 @@ class RfqController extends Controller
             $items = $data['items'] ?? null;
             unset($data['items']);
 
+            // Same scope/vendor logic as create — see store() for context.
+            $vendorIdsProvided = array_key_exists('vendor_ids', $data);
+            $vendorIds = $vendorIdsProvided
+                ? array_values(array_unique($data['vendor_ids'] ?? []))
+                : null;
+            unset($data['vendor_ids']);
+
+            $scope = $data['scope'] ?? $rfq->scope ?? 'targeted';
+            $data['scope'] = $scope;
+
+            if ($scope === 'targeted') {
+                if ($vendorIdsProvided && empty($vendorIds) && empty($data['vendor_id'] ?? $rfq->vendor_id)) {
+                    return $this->error('Select at least one vendor for a targeted RFQ.', 422);
+                }
+                if ($vendorIdsProvided && empty($data['vendor_id']) && !empty($vendorIds)) {
+                    $data['vendor_id'] = $vendorIds[0];
+                }
+                $data['advertised_on'] = $data['advertised_on'] ?? null;
+            } else { // open
+                if (!empty($vendorIds)) {
+                    return $this->error('Open-call RFQs do not pin specific vendors. Switch to targeted to pick vendors.', 422);
+                }
+                $data['vendor_id'] = null;
+                $vendorIds = [];
+                $vendorIdsProvided = true; // we want to clear the pivot
+            }
+
             $rfq->update($data);
+
+            if ($vendorIdsProvided) {
+                $rfq->vendors()->sync($vendorIds ?? []);
+            }
 
             if ($items !== null) {
                 $existingIds = [];
@@ -218,7 +280,7 @@ class RfqController extends Controller
             }
 
             $rfq->refresh();
-            $rfq->load(['vendor', 'items']);
+            $rfq->load(['vendor', 'vendors', 'items']);
 
             AuditLog::record(
                 auth()->id(),
@@ -296,7 +358,7 @@ class RfqController extends Controller
             $oldStatus = $rfq->status;
             $rfq->update(['status' => 'open']);
             $rfq->refresh();
-            $rfq->load(['vendor', 'items']);
+            $rfq->load(['vendor', 'vendors', 'items']);
 
             AuditLog::record(
                 auth()->id(),
