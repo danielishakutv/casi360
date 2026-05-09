@@ -189,7 +189,11 @@ class DemoDataSeeder extends Seeder
         $procDeptId = Department::where('name', 'Procurement')->value('id')
             ?? Department::where('code', 'PROCUREMENT')->value('id');
 
+        // project_manager_id is a FK to employees.id (not users.id). The
+        // procurement manager's auto-created employee row is what links
+        // them to the project — fall back to null if no employee exists.
         $manager = $this->users['procmgr'];
+        $managerEmployeeId = $manager->employee?->id;
 
         $projects = [
             [
@@ -200,7 +204,7 @@ class DemoDataSeeder extends Seeder
                     'description'        => 'Community health outreach across two LGAs in Borno State.',
                     'objectives'         => 'Reach 5,000 households with primary health screening and referral.',
                     'department_id'      => $progDeptId,
-                    'project_manager_id' => $manager->id,
+                    'project_manager_id' => $managerEmployeeId,
                     'start_date'         => '2026-04-01',
                     'end_date'           => '2026-12-31',
                     'location'           => 'Maiduguri, Borno',
@@ -223,7 +227,7 @@ class DemoDataSeeder extends Seeder
                     'description'        => 'Out-of-school children re-enrolment and school supplies distribution.',
                     'objectives'         => 'Re-enrol 800 children and equip 12 schools with learning materials.',
                     'department_id'      => $progDeptId,
-                    'project_manager_id' => $manager->id,
+                    'project_manager_id' => $managerEmployeeId,
                     'start_date'         => '2026-05-01',
                     'end_date'           => '2027-04-30',
                     'location'           => 'Yola, Adamawa',
@@ -357,7 +361,8 @@ class DemoDataSeeder extends Seeder
                 'requested_by'    => $requester->id,
                 'submitted_by'    => $this->users['opsstaff']->id,
                 'project_id'      => $this->projects['p1']->id,
-                'budget_holder_id'=> $approver->id,
+                // budget_holder_id is a FK to employees.id, not users.id
+                'budget_holder_id'=> $approver->employee?->id,
                 'title'           => 'DEMO Maiduguri health-kit PR',
                 'date'            => '2026-04-10',
                 'justification'   => 'Health screening rollout starts 2026-04-22; kits must be on-site one week prior.',
