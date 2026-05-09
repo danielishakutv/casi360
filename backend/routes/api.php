@@ -1031,19 +1031,6 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 ->name('reports.finance.overview');
         });
 
-        // --- Finance Dashboard ---
-        Route::prefix('finance')->group(function () {
-            Route::get('/stats', [FinanceReportController::class, 'stats'])
-                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
-                ->name('finance.stats');
-            Route::get('/budget-lines/flagged', [FinanceReportController::class, 'flaggedBudgetLines'])
-                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
-                ->name('finance.budget-lines.flagged');
-            Route::get('/recent-actions', [FinanceReportController::class, 'recentActions'])
-                ->middleware(PermissionMiddleware::class . ':reports.reports.view')
-                ->name('finance.recent-actions');
-        });
-
         // --- Audit Reports ---
         Route::prefix('audit')->group(function () {
             Route::get('/logs', [AuditReportController::class, 'logs'])
@@ -1053,6 +1040,34 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 ->middleware(PermissionMiddleware::class . ':reports.reports.audit')
                 ->name('reports.audit.login-history');
         });
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Finance Module — Dashboard (Authenticated, Permission-Controlled)
+    |--------------------------------------------------------------------------
+    |
+    | Endpoints powering the Finance Overview screen. Lives under the
+    | top-level /finance prefix (not /reports/finance) so the frontend
+    | service that calls /api/v1/finance/stats etc. resolves correctly.
+    | Reuses the FinanceReportController since the queries are the same;
+    | the dashboard is just an interactive view of report data.
+    |
+    |   GET /api/v1/finance/stats                 - Aggregate dashboard counters
+    |   GET /api/v1/finance/budget-lines/flagged  - Low / critical / overdrawn lines
+    |   GET /api/v1/finance/recent-actions        - Recent finance-stage decisions
+    |
+    */
+    Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('finance')->group(function () {
+        Route::get('/stats', [FinanceReportController::class, 'stats'])
+            ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+            ->name('finance.stats');
+        Route::get('/budget-lines/flagged', [FinanceReportController::class, 'flaggedBudgetLines'])
+            ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+            ->name('finance.budget-lines.flagged');
+        Route::get('/recent-actions', [FinanceReportController::class, 'recentActions'])
+            ->middleware(PermissionMiddleware::class . ':reports.reports.view')
+            ->name('finance.recent-actions');
     });
 
     /*
