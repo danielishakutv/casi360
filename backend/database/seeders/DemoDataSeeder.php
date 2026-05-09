@@ -369,8 +369,11 @@ class DemoDataSeeder extends Seeder
                 'priority'        => 'high',
                 'needed_by'       => '2026-04-18',
                 'estimated_cost'  => 1385000,
-                'notes'           => 'Driven by approved DEMO-BOQ-001.',
-                'boq'             => $boqs['b1']->boq_number,
+                'notes'           => 'Driven by approved ' . $boqs['b1']->boq_number . '.',
+                // requisitions.boq is a boolean flag (PR has a BOQ?),
+                // not a reference column. The BOQ number lives in notes
+                // and the chain resolver links them.
+                'boq'             => true,
                 'project_code'    => $this->projects['p1']->project_code,
                 'currency'        => 'NGN',
                 'status'          => 'approved',
