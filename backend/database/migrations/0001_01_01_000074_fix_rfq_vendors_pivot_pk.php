@@ -19,6 +19,12 @@ use Illuminate\Support\Facades\Schema;
  * vendor_id) pair is naturally unique and is exactly what Laravel
  * expects to insert. Promoting it to PK and dropping `id` makes
  * sync() work without further code changes.
+ *
+ * MySQL refuses to drop the composite unique index directly because
+ * it's the backing index for the `rfq_id` foreign key (no standalone
+ * rfq_id index exists). So we drop the FK first, reshape the table,
+ * then re-add the FK on top of the new composite PK (which leads
+ * with rfq_id and serves as the backing index automatically).
  */
 return new class extends Migration
 {
@@ -28,9 +34,23 @@ return new class extends Migration
             return;
         }
 
-        // Drop the redundant unique index first — the same column pair
-        // is about to become the PK, and MySQL rejects a PK on columns
-        // already covered by an identical unique index in some versions.
+        // Look up the rfq_id FK by inspecting information_schema rather
+        // than assuming Laravel's default constraint name — keeps the
+        // migration robust if the constraint was named differently.
+        $rfqFk = DB::selectOne(
+            "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'rfq_vendors'
+               AND COLUMN_NAME = 'rfq_id'
+               AND REFERENCED_TABLE_NAME = 'rfqs'
+             LIMIT 1"
+        );
+
+        if ($rfqFk) {
+            DB::statement("ALTER TABLE `rfq_vendors` DROP FOREIGN KEY `{$rfqFk->CONSTRAINT_NAME}`");
+        }
+
+        // Now safe to drop the composite unique — its backing FK is gone.
         $hasUnique = DB::selectOne(
             "SHOW INDEX FROM `rfq_vendors` WHERE Key_name = 'rfq_vendors_rfq_id_vendor_id_unique'"
         );
@@ -39,15 +59,24 @@ return new class extends Migration
         }
 
         // Drop the surrogate id PK + column and promote (rfq_id,
-        // vendor_id) in a single ALTER TABLE so the table is never
-        // left without a primary key.
-        $hasIdColumn = Schema::hasColumn('rfq_vendors', 'id');
-        if ($hasIdColumn) {
+        // vendor_id) in one ALTER so the table is never left without
+        // a primary key.
+        if (Schema::hasColumn('rfq_vendors', 'id')) {
             DB::statement(
                 'ALTER TABLE `rfq_vendors` '
                 . 'DROP PRIMARY KEY, '
                 . 'DROP COLUMN `id`, '
                 . 'ADD PRIMARY KEY (`rfq_id`, `vendor_id`)'
+            );
+        }
+
+        // Re-add the FK. The new composite PK leads with rfq_id and
+        // serves as the backing index, so no separate index is needed.
+        if ($rfqFk) {
+            DB::statement(
+                "ALTER TABLE `rfq_vendors` "
+                . "ADD CONSTRAINT `{$rfqFk->CONSTRAINT_NAME}` "
+                . "FOREIGN KEY (`rfq_id`) REFERENCES `rfqs` (`id`) ON DELETE CASCADE"
             );
         }
     }
