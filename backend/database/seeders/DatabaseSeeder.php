@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             HRSeeder::class,                  // departments + designations + leave types
             ProcurementDefaultsSeeder::class, // vendor categories
             ProjectDefaultsSeeder::class,     // budget categories
+            HelpArticleSeeder::class,         // knowledge base content
 
             // ── Demo / fixture data (kept for dev convenience) ──
             // These add named fixtures (vendors, projects, employees,

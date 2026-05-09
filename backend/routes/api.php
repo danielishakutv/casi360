@@ -1096,6 +1096,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
     |--------------------------------------------------------------------------
     */
     Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('help')->group(function () {
+        // Read endpoints — any authenticated user
         Route::get('/articles', [HelpCenterController::class, 'articles'])
             ->name('help.articles.index');
         Route::get('/articles/{id}', [HelpCenterController::class, 'showArticle'])
@@ -1103,6 +1104,26 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
         Route::post('/tickets', [HelpCenterController::class, 'submitTicket'])
             ->middleware('throttle:10,1')
             ->name('help.tickets.store');
+
+        // Article CRUD — gated inside controller (super_admin or allowlisted editors)
+        Route::post('/articles', [HelpCenterController::class, 'storeArticle'])
+            ->name('help.articles.store');
+        Route::patch('/articles/{id}', [HelpCenterController::class, 'updateArticle'])
+            ->name('help.articles.update');
+        Route::delete('/articles/{id}', [HelpCenterController::class, 'destroyArticle'])
+            ->name('help.articles.destroy');
+
+        // Editor allowlist management — super_admin only
+        Route::middleware([RoleMiddleware::class . ':super_admin'])->group(function () {
+            Route::get('/editors', [HelpCenterController::class, 'listEditors'])
+                ->name('help.editors.index');
+            Route::post('/editors', [HelpCenterController::class, 'addEditor'])
+                ->name('help.editors.store');
+            Route::delete('/editors/{id}', [HelpCenterController::class, 'removeEditor'])
+                ->name('help.editors.destroy');
+            Route::get('/editors-eligible', [HelpCenterController::class, 'eligibleUsers'])
+                ->name('help.editors.eligible');
+        });
     });
 
     /*

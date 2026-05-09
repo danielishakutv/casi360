@@ -119,6 +119,11 @@ class User extends Authenticatable
         return $this->hasOne(Employee::class, 'user_id');
     }
 
+    public function helpArticleEditor()
+    {
+        return $this->hasOne(HelpArticleEditor::class, 'user_id');
+    }
+
     /* ----------------------------------------------------------------
      * Helpers
      * ---------------------------------------------------------------- */
