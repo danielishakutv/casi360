@@ -346,20 +346,17 @@ class DemoDataSeeder extends Seeder
     private function seedPRs(array $boqs): array
     {
         $progDeptId = Department::where('name', 'Programs')->value('id');
-        $requester = $this->users['opsstaff']->employee;
-        $approver  = $this->users['finmgr'];
-
-        if (!$requester) {
-            $this->command?->warn('No employee for ops staff — skipping PRs.');
-            return [];
-        }
+        // requisitions.requested_by was re-pointed to users.id by
+        // migration 0052 — pass the user UUID, not the employee UUID.
+        $opsUser  = $this->users['opsstaff'];
+        $approver = $this->users['finmgr'];
 
         $pr1 = Requisition::updateOrCreate(
             ['requisition_number' => 'DEMO-PR-001'],
             [
                 'department_id'   => $progDeptId,
-                'requested_by'    => $requester->id,
-                'submitted_by'    => $this->users['opsstaff']->id,
+                'requested_by'    => $opsUser->id,
+                'submitted_by'    => $opsUser->id,
                 'project_id'      => $this->projects['p1']->id,
                 // budget_holder_id is a FK to employees.id, not users.id
                 'budget_holder_id'=> $approver->employee?->id,
@@ -401,8 +398,8 @@ class DemoDataSeeder extends Seeder
             ['requisition_number' => 'DEMO-PR-002'],
             [
                 'department_id'  => $progDeptId,
-                'requested_by'   => $requester->id,
-                'submitted_by'   => $this->users['opsstaff']->id,
+                'requested_by'   => $opsUser->id,
+                'submitted_by'   => $opsUser->id,
                 'project_id'     => $this->projects['p2']->id,
                 'title'          => 'DEMO Yola school supplies PR',
                 'date'           => '2026-05-05',
