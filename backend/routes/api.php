@@ -150,10 +150,14 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             | Admin-Only Routes (super_admin, admin)
             |--------------------------------------------------------------------------
             */
-            Route::middleware([RoleMiddleware::class . ':super_admin,admin', 'throttle:60,1'])->group(function () {
+            Route::middleware([RoleMiddleware::class . ':super_admin,admin', 'throttle:300,1'])->group(function () {
 
+                // Account creation is admin-only (auth + super_admin/admin role already gate it),
+                // so the rate limit here is effectively just an abuse backstop. Kept very high and
+                // hardcoded (not env-driven) so a git pull always takes effect regardless of the
+                // server .env. 1000/min = practically unlimited for normal admin use.
                 Route::post('/register', [RegisterController::class, 'register'])
-                    ->middleware('throttle:' . env('REGISTER_RATE_LIMIT', 10) . ',1')
+                    ->middleware('throttle:1000,1')
                     ->name('auth.register');
 
                 // User management
