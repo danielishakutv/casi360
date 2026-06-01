@@ -18,8 +18,8 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'string', 'email', 'max:255', 'unique:users,email,' . $userId],
-            'phone' => ['sometimes', 'string', 'max:20'],
-            'department' => ['sometimes', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'department' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', 'string', 'in:active,inactive'],
         ];
     }

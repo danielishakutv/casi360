@@ -27,9 +27,13 @@ class RegisterUserRequest extends FormRequest
                     ->symbols()
                     ->uncompromised(),
             ],
-            'role' => ['sometimes', 'string', 'in:super_admin,admin,manager,staff'],
-            'department' => ['sometimes', 'string', 'max:255'],
-            'phone' => ['sometimes', 'string', 'max:20'],
+            // nullable: the frontend always sends these keys, and Laravel's
+            // ConvertEmptyStringsToNull middleware turns empty inputs into null.
+            // Without nullable, an empty phone/department/role would fail the
+            // string rule and return a 422. These fields are optional by design.
+            'role' => ['sometimes', 'nullable', 'string', 'in:super_admin,admin,manager,staff'],
+            'department' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
         ];
     }
 
