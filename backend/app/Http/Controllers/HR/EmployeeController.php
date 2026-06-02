@@ -53,9 +53,20 @@ class EmployeeController extends Controller
             $query->orderBy($sortBy, $sortDir === 'desc' ? 'desc' : 'asc');
         }
 
-        // Pagination (capped at 100)
+        // Pagination (pass per_page=0 to get all without pagination, capped at 100)
         $perPage = min((int) $request->input('per_page', 25), 100);
-        $paginated = $query->paginate($perPage);
+
+        if ($perPage == 0) {
+            $employees = $query->get();
+            return $this->success([
+                'employees' => $employees->map->toApiArray(),
+                'meta' => [
+                    'total' => $employees->count(),
+                ],
+            ]);
+        }
+
+        $paginated = $query->paginate((int) $perPage);
 
         return $this->success([
             'employees' => collect($paginated->items())->map->toApiArray(),
