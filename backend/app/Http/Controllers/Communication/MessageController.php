@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Communication\StoreMessageRequest;
 use App\Models\AuditLog;
 use App\Models\Message;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -187,5 +188,35 @@ class MessageController extends Controller
     {
         $count = Message::inbox(auth()->id())->whereNull('read_at')->count();
         return $this->success(['unread_count' => $count]);
+    }
+
+    /**
+     * GET /communication/messages/recipients
+     *
+     * Lightweight list of everyone a message can be sent to — every active
+     * user except the caller. Available to anyone who can view messages so
+     * all staff can compose freely (the admin-only /auth/users endpoint is
+     * not usable for this). Returns id / name / email only.
+     */
+    public function recipients(Request $request): JsonResponse
+    {
+        $query = User::query()
+            ->where('id', '!=', auth()->id())
+            ->where('status', 'active');
+
+        if ($request->filled('search')) {
+            $search = str_replace(['%', '_'], ['\%', '\_'], $request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->orderBy('name')->get(['id', 'name', 'email']);
+
+        return $this->success([
+            'users' => $users,
+            'meta' => ['total' => $users->count()],
+        ]);
     }
 }

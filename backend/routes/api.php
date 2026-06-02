@@ -847,6 +847,9 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
         // --- Messages (1-on-1 with threading) ---
         Route::get('/messages/unread-count', [MessageController::class, 'unreadCount'])
             ->middleware(PermissionMiddleware::class . ':communication.messages.view');
+        // Recipient picker — must precede the /messages/{threadId} catch-all.
+        Route::get('/messages/recipients', [MessageController::class, 'recipients'])
+            ->middleware(PermissionMiddleware::class . ':communication.messages.view');
         Route::get('/messages', [MessageController::class, 'index'])
             ->middleware(PermissionMiddleware::class . ':communication.messages.view');
         Route::get('/messages/{threadId}', [MessageController::class, 'show'])
