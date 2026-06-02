@@ -54,7 +54,19 @@ class UserManagementController extends Controller
             });
         }
 
+        // Pagination (pass per_page=0 to get all without pagination, capped at 100)
         $perPage = min((int) $request->input('per_page', 25), 100);
+
+        if ($perPage == 0) {
+            $users = $query->orderBy('name')->get();
+            return $this->success([
+                'users' => $users->map->toAuthArray(),
+                'meta' => [
+                    'total' => $users->count(),
+                ],
+            ]);
+        }
+
         $users = $query->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
