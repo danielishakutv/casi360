@@ -40,7 +40,19 @@ class ProjectController extends Controller
             $query->orderBy($sortBy, $sortDir === 'desc' ? 'desc' : 'asc');
         }
 
+        // Pagination (pass per_page=0 to get all without pagination, capped at 100)
         $perPage = min((int) $request->input('per_page', 25), 100);
+
+        if ($perPage == 0) {
+            $projects = $query->get();
+            return $this->success([
+                'projects' => $projects->map->toApiArray(),
+                'meta' => [
+                    'total' => $projects->count(),
+                ],
+            ]);
+        }
+
         $paginated = $query->paginate($perPage);
 
         return $this->success([
