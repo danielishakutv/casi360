@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ReconcilesEmployeeReferences;
 use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Console\Command;
@@ -36,24 +37,29 @@ use Illuminate\Support\Facades\Schema;
  *   • It refuses to remove every account.
  *   • Always preview first:  php artisan app:remove-accounts a@x.org --dry-run
  *
+ * By default the linked HR employee record is removed too (so the person
+ * disappears from the staff list); pass --keep-employee to retain it.
+ *
  * Usage:
  *   php artisan app:remove-accounts jane@casi.org john@casi.org
  *   php artisan app:remove-accounts jane@casi.org --dry-run
  *   php artisan app:remove-accounts --id=9b1f… --id=4c2a… --force
  *   php artisan app:remove-accounts jane@casi.org --reassign-to=admin@casi.org
- *   php artisan app:remove-accounts jane@casi.org --delete-employee   # also drop HR record
+ *   php artisan app:remove-accounts jane@casi.org --keep-employee   # keep HR record
  */
 class RemoveAccountsCommand extends Command
 {
+    use ReconcilesEmployeeReferences;
+
     protected $signature = 'app:remove-accounts
         {emails?* : One or more account emails to remove}
         {--id=* : One or more account UUIDs to remove (in addition to any emails)}
         {--reassign-to= : Email of a surviving admin to inherit not-nullable authorship (default: protected admin)}
-        {--delete-employee : Also delete the linked HR employee record (default: keep it, just unlink)}
+        {--keep-employee : Keep the linked HR employee record (default: remove it from the staff list too)}
         {--dry-run : Show exactly what would change without touching anything}
         {--force : Skip the confirmation prompt (for non-interactive server runs)}';
 
-    protected $description = 'Safely remove specific user accounts by email/id, reconciling all references so no business data is lost.';
+    protected $description = 'Safely remove specific user accounts (and their HR record) by email/id, reconciling all references so no business data is lost.';
 
     /** Accounts that can never be removed by this command. */
     private const PROTECTED_EMAILS = ['daniel@casi.org'];
@@ -76,13 +82,13 @@ class RemoveAccountsCommand extends Command
      * Authorship on shared records. Each column is detached: set NULL when
      * the column is nullable, otherwise reassigned to the fallback admin.
      * [table => [columns]]. Guarded by hasTable/hasColumn at runtime.
-     * (employees.user_id is handled separately so --delete-employee works.)
+     * (employees.user_id is handled separately so --keep-employee works.)
      */
     private const DETACH = [
         'audit_logs'             => ['user_id'],
         'login_history'          => ['user_id'],
         'purchase_orders'        => ['submitted_by'],
-        'requisitions'           => ['submitted_by', 'requested_by', 'budget_holder_id'],
+        'requisitions'           => ['submitted_by', 'requested_by'],
         'requisition_approvals'  => ['actor_id'],
         'requisition_audit_logs' => ['actor_id'],
         'approval_steps'         => ['acted_by'],
@@ -173,6 +179,14 @@ class RemoveAccountsCommand extends Command
             return self::FAILURE; // message already printed
         }
 
+        // The surviving admin's employee record inherits any not-nullable
+        // employee references when we remove the linked HR records.
+        $reassignEmployeeId = DB::table('employees')
+            ->where(function ($q) use ($reassign) {
+                $q->where('user_id', $reassign->id)->orWhere('email', $reassign->email);
+            })
+            ->value('id');
+
         // ── Preview ─────────────────────────────────────────────────
         $this->newLine();
         $this->info($dryRun ? 'DRY RUN — nothing will be changed.' : 'Preparing to remove account(s)…');
@@ -183,9 +197,9 @@ class RemoveAccountsCommand extends Command
         }
         $this->newLine();
         $this->line("Not-nullable authorship will be reassigned to: {$reassign->email}");
-        $this->line($this->option('delete-employee')
-            ? 'Linked HR employee records: WILL BE DELETED (--delete-employee).'
-            : 'Linked HR employee records: kept (unlinked only).');
+        $this->line($this->option('keep-employee')
+            ? 'Linked HR employee records: kept (unlinked only) — --keep-employee.'
+            : 'Linked HR employee records: WILL BE REMOVED from the staff list too.');
 
         // Reference scan.
         $this->newLine();
@@ -250,7 +264,7 @@ class RemoveAccountsCommand extends Command
         $this->newLine();
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
         try {
-            DB::transaction(function () use ($targetIds, $reassign) {
+            DB::transaction(function () use ($targetIds, $reassign, $reassignEmployeeId) {
                 // 0. Notices authored by the removed users cascade to their
                 //    audience + read children — but FK checks are off, so the
                 //    DB won't do it for us. Clean the grandchildren by the
@@ -306,18 +320,17 @@ class RemoveAccountsCommand extends Command
                     }
                 }
 
-                // 3. HR employee record: detach (default) or delete.
+                // 3. HR employee record: remove it too (default), or keep
+                //    it (just unlink) when --keep-employee is passed.
                 if (Schema::hasTable('employees') && Schema::hasColumn('employees', 'user_id')) {
-                    if ($this->option('delete-employee')) {
-                        $n = DB::table('employees')->whereIn('user_id', $targetIds)->delete();
-                        if ($n > 0) {
-                            $this->line("  [deleted ] {$n} employee record(s)");
-                        }
-                    } else {
+                    if ($this->option('keep-employee')) {
                         $n = DB::table('employees')->whereIn('user_id', $targetIds)->update(['user_id' => null]);
                         if ($n > 0) {
                             $this->line("  [unlinked] {$n} employee record(s) (HR data kept)");
                         }
+                    } else {
+                        $empIds = DB::table('employees')->whereIn('user_id', $targetIds)->pluck('id')->all();
+                        $this->reconcileAndDeleteEmployees($empIds, $reassignEmployeeId);
                     }
                 }
 
@@ -360,7 +373,7 @@ class RemoveAccountsCommand extends Command
                 'summary'          => 'Specific account(s) removed via app:remove-accounts.',
                 'removed'          => $targets->map(fn ($u) => ['id' => $u->id, 'email' => $u->email, 'role' => $u->role])->all(),
                 'reassigned_to'    => ['id' => $reassign->id, 'email' => $reassign->email],
-                'employee_records' => $this->option('delete-employee') ? 'deleted' : 'kept_unlinked',
+                'employee_records' => $this->option('keep-employee') ? 'kept_unlinked' : 'removed',
                 'performed_at'     => now()->toISOString(),
             ],
         ]);
