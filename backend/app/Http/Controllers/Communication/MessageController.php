@@ -7,6 +7,7 @@ use App\Http\Requests\Communication\StoreMessageRequest;
 use App\Models\AuditLog;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -122,7 +123,7 @@ class MessageController extends Controller
             return $this->error('You cannot send a message to yourself.', 422);
         }
 
-        return DB::transaction(function () use ($request, $senderId) {
+        $result = DB::transaction(function () use ($request, $senderId) {
             $data = $request->validated();
             $data['sender_id'] = $senderId;
 
@@ -151,10 +152,21 @@ class MessageController extends Controller
                 ['recipient_id' => $message->recipient_id, 'subject' => $message->subject ?? '(reply)']
             );
 
-            return $this->success([
-                'message' => $message->toApiArray(),
-            ], 'Message sent successfully', 201);
+            return $message;
         });
+
+        // The participant guard above returns an error response from inside
+        // the transaction; pass it straight through.
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        // Email the recipient after the response is sent (never blocks/breaks).
+        Notifier::newDirectMessage($result);
+
+        return $this->success([
+            'message' => $result->toApiArray(),
+        ], 'Message sent successfully', 201);
     }
 
     /**

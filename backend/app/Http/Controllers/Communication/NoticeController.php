@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Notice;
 use App\Models\NoticeRead;
 use App\Models\User;
+use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -109,7 +110,7 @@ class NoticeController extends Controller
      */
     public function store(StoreNoticeRequest $request): JsonResponse
     {
-        return DB::transaction(function () use ($request) {
+        $notice = DB::transaction(function () use ($request) {
             $validated = $request->validated();
             $audiences = $validated['audiences'];
             unset($validated['audiences']);
@@ -132,10 +133,15 @@ class NoticeController extends Controller
                 $notice->toApiArray()
             );
 
-            return $this->success([
-                'notice' => $notice->toDetailArray(),
-            ], 'Notice created successfully', 201);
+            return $notice;
         });
+
+        // Email the targeted audience after the response (published only).
+        Notifier::newNotice($notice);
+
+        return $this->success([
+            'notice' => $notice->toDetailArray(),
+        ], 'Notice created successfully', 201);
     }
 
     /**
@@ -146,8 +152,9 @@ class NoticeController extends Controller
     {
         $notice = Notice::findOrFail($id);
         $oldValues = $notice->toApiArray();
+        $wasPublished = $notice->status === 'published';
 
-        return DB::transaction(function () use ($request, $notice, $oldValues) {
+        $notice = DB::transaction(function () use ($request, $notice, $oldValues) {
             $validated = $request->validated();
 
             // If audiences are provided, replace them
@@ -173,10 +180,17 @@ class NoticeController extends Controller
                 $notice->fresh()->toApiArray()
             );
 
-            return $this->success([
-                'notice' => $notice->fresh()->load(['author', 'audiences'])->toDetailArray(),
-            ], 'Notice updated successfully');
+            return $notice->fresh()->load(['author', 'audiences']);
         });
+
+        // If this update is what published the notice, email its audience.
+        if (!$wasPublished && $notice->status === 'published') {
+            Notifier::newNotice($notice);
+        }
+
+        return $this->success([
+            'notice' => $notice->toDetailArray(),
+        ], 'Notice updated successfully');
     }
 
     /**

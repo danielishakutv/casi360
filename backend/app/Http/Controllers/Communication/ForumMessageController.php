@@ -7,6 +7,7 @@ use App\Http\Requests\Communication\StoreForumMessageRequest;
 use App\Models\AuditLog;
 use App\Models\Forum;
 use App\Models\ForumMessage;
+use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -80,7 +81,7 @@ class ForumMessageController extends Controller
             ForumMessage::where('forum_id', $forumId)->findOrFail($request->reply_to_id);
         }
 
-        return DB::transaction(function () use ($request, $forum) {
+        $message = DB::transaction(function () use ($request, $forum) {
             $message = $forum->messages()->create([
                 'user_id' => auth()->id(),
                 'body' => $request->body,
@@ -98,10 +99,15 @@ class ForumMessageController extends Controller
                 ['message_id' => $message->id, 'forum' => $forum->name]
             );
 
-            return $this->success([
-                'message' => $message->toApiArray(),
-            ], 'Message posted successfully', 201);
+            return $message;
         });
+
+        // Email thread participants after the response is sent (replies only).
+        Notifier::newForumReply($message, $forum);
+
+        return $this->success([
+            'message' => $message->toApiArray(),
+        ], 'Message posted successfully', 201);
     }
 
     /**
