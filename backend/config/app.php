@@ -30,6 +30,13 @@ return [
     'url' => env('APP_URL', 'https://api.casi360.com'),
 
     /*
+    | The public-facing frontend (the React app users actually click into).
+    | Used to build links inside notification emails — these must point at
+    | the app, not the API. Mirrors the FRONTEND_URL used by CORS/Sanctum.
+    */
+    'frontend_url' => env('FRONTEND_URL', 'https://casi360.com'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
