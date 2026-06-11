@@ -598,9 +598,10 @@ class PermissionSeeder extends Seeder
                 'procurement.vendor_categories.create' => false,
                 'procurement.vendor_categories.edit' => false,
                 'procurement.vendor_categories.delete' => false,
+                // Every department can raise a Bill of Quantities (like PRs).
                 'procurement.boq.view' => true,
-                'procurement.boq.create' => false,
-                'procurement.boq.edit' => false,
+                'procurement.boq.create' => true,
+                'procurement.boq.edit' => true,
                 'procurement.boq.delete' => false,
                 'procurement.boq.approve' => false,
                 'procurement.boq.view_all' => false,

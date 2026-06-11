@@ -33,6 +33,7 @@
  *   POST   /api/v1/auth/users/{id}/reset-password - Reset to default + force change
  */
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\ProfileController;
@@ -170,6 +171,19 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 Route::post('/users/{id}/reset-password', [UserManagementController::class, 'resetPassword'])->name('auth.users.reset-password');
             });
         });
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard (Authenticated) — department-scoped landing summary
+    |--------------------------------------------------------------------------
+    |   GET /api/v1/dashboard/summary  - Role/department-aware dashboard data.
+    |   Privileged users (admin / country_director / Operations managers) get
+    |   the organisation-wide view; everyone else gets only their own PRs/BOQs,
+    |   their department's projects, and notices targeted at them.
+    */
+    Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('dashboard')->group(function () {
+        Route::get('/summary', [DashboardController::class, 'summary'])->name('dashboard.summary');
     });
 
     /*
