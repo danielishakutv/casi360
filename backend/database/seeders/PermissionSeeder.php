@@ -110,7 +110,8 @@ class PermissionSeeder extends Seeder
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'view',         'description' => 'View the Approvals page and pending purchase requests'],
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'budget_holder', 'description' => 'Act as Budget Holder — Stage 1 PR approval (project manager of the linked project)'],
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'finance',       'description' => 'Act as Finance approver — Stage 2 PR approval (Finance department manager)'],
-            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'procurement',   'description' => 'Act as Procurement Manager — Stage 3 PR approval (Procurement department manager, final stage)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'procurement',   'description' => 'Act as Procurement Manager — Stage 3 PR approval (Procurement department manager)'],
+            ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'operations',    'description' => 'Act as Operations approver — Stage 4 PR / final BOQ & RFQ approval (Operations department manager)'],
             ['module' => 'procurement', 'feature' => 'approvals', 'action' => 'view_all',      'description' => 'See approval history for the whole organisation, not just records that concern this user'],
 
             // --- Procurement: Disbursements ---
@@ -302,6 +303,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => true,
                 'procurement.approvals.finance'       => true,
                 'procurement.approvals.procurement'   => true,
+                'procurement.approvals.operations'    => true,
                 'procurement.approvals.view_all'      => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => true,
@@ -446,6 +448,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => true,
                 'procurement.approvals.finance'       => true,
                 'procurement.approvals.procurement'   => true,
+                'procurement.approvals.operations'    => true,
                 // Managers see only history that concerns them by default; super admin can grant view_all per manager.
                 'procurement.approvals.view_all'      => false,
                 'procurement.disbursements.view' => true,
@@ -458,7 +461,8 @@ class PermissionSeeder extends Seeder
                 'procurement.boq.create' => true,
                 'procurement.boq.edit' => true,
                 'procurement.boq.delete' => false,
-                'procurement.boq.approve' => false,
+                // Entitlement only — BoqController narrows acting to Operations managers.
+                'procurement.boq.approve' => true,
                 'procurement.boq.view_all' => false,
                 'procurement.rfq.view' => true,
                 'procurement.rfq.create' => true,
@@ -591,6 +595,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => false,
                 'procurement.approvals.finance'       => false,
                 'procurement.approvals.procurement'   => false,
+                'procurement.approvals.operations'    => false,
                 'procurement.approvals.view_all'      => false,
                 'procurement.disbursements.view' => false,
                 'procurement.disbursements.create' => false,
@@ -741,6 +746,7 @@ class PermissionSeeder extends Seeder
                 'procurement.approvals.budget_holder' => false,
                 'procurement.approvals.finance' => false,
                 'procurement.approvals.procurement' => false,
+                'procurement.approvals.operations' => false,
                 'procurement.approvals.view_all' => true,
                 'procurement.disbursements.view' => true,
                 'procurement.disbursements.create' => true,

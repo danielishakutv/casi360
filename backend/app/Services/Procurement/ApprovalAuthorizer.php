@@ -29,6 +29,7 @@ class ApprovalAuthorizer
 {
     public const FINANCE_CODE     = 'FINANCE';
     public const PROCUREMENT_CODE = 'PROCUREMENT';
+    public const OPERATIONS_CODE  = 'OPERATIONS';
 
     /** In-request cache of Department lookups keyed by code. */
     private array $departmentByCode = [];
@@ -48,6 +49,7 @@ class ApprovalAuthorizer
             'budget_holder' => $this->canActAsBudgetHolder($user, $requisition),
             'finance'       => $this->canActAsFinance($user),
             'procurement'   => $this->canActAsProcurement($user),
+            'operations'    => $this->canActAsOperations($user),
             default         => ['allowed' => false, 'reason' => "Unknown approval stage: {$stage}."],
         };
     }
@@ -60,7 +62,7 @@ class ApprovalAuthorizer
     public function eligibleStagesFor(User $user): array
     {
         if ($this->isAdmin($user)) {
-            return ['budget_holder', 'finance', 'procurement'];
+            return ['budget_holder', 'finance', 'procurement', 'operations'];
         }
 
         $stages = ['budget_holder']; // PR-specific; further filtered per requisition
@@ -73,7 +75,21 @@ class ApprovalAuthorizer
             $stages[] = 'procurement';
         }
 
+        if ($this->isManagerInDepartment($user, self::OPERATIONS_CODE)) {
+            $stages[] = 'operations';
+        }
+
         return $stages;
+    }
+
+    /**
+     * Can this user act as the Operations approver? Used for the PR Operations
+     * stage AND for BOQ approval (Operations is the final approver on both).
+     * Admins always may; otherwise the user must be a manager in Operations.
+     */
+    public function isOperationsApprover(User $user): bool
+    {
+        return $this->isAdmin($user) || $this->isManagerInDepartment($user, self::OPERATIONS_CODE);
     }
 
     /**
@@ -201,5 +217,12 @@ class ApprovalAuthorizer
         return $this->isManagerInDepartment($user, self::PROCUREMENT_CODE)
             ? ['allowed' => true, 'reason' => null]
             : ['allowed' => false, 'reason' => 'Only a manager in the Procurement department (or an administrator) can approve at the Procurement stage.'];
+    }
+
+    private function canActAsOperations(User $user): array
+    {
+        return $this->isManagerInDepartment($user, self::OPERATIONS_CODE)
+            ? ['allowed' => true, 'reason' => null]
+            : ['allowed' => false, 'reason' => 'Only a manager in the Operations department (or an administrator) can approve at the Operations stage.'];
     }
 }

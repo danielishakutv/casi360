@@ -241,6 +241,9 @@ class User extends Authenticatable
             // the frontend can scope dashboards/menus without re-deriving them.
             'department_code' => $scope->userDepartmentCode($this),
             'can_see_all_departments' => $scope->canSeeAllDepartments($this),
+            // Whether this user can act as the Operations approver (final stage
+            // on PR; the approver on BOQ) — lets the UI hide dead approve buttons.
+            'is_operations_approver' => $scope->isOperationsApprover($this),
             'phone' => $this->phone,
             'avatar' => $this->avatar,
             'status' => $this->status,

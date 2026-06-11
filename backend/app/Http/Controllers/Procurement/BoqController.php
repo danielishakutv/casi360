@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Boq;
 use App\Models\BoqAuditLog;
 use App\Models\BoqItem;
+use App\Services\Procurement\ApprovalAuthorizer;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,10 @@ use Illuminate\Support\Facades\DB;
 
 class BoqController extends Controller
 {
-    public function __construct(private DocumentScopeService $scopeService)
-    {
+    public function __construct(
+        private DocumentScopeService $scopeService,
+        private ApprovalAuthorizer $authorizer,
+    ) {
     }
 
     /**
@@ -306,6 +309,13 @@ class BoqController extends Controller
     public function approval(ProcessBoqApprovalRequest $request, string $id): JsonResponse
     {
         $boq = Boq::findOrFail($id);
+
+        // Operations is the final approver on BOQs. The route guard only checks
+        // the boq.approve entitlement (held by all managers); narrow the actual
+        // right to act to admins and Operations-department managers/leads.
+        if (!$this->authorizer->isOperationsApprover($request->user())) {
+            return $this->error('Only an Operations department manager (or an administrator) can approve a BOQ.', 403);
+        }
 
         if ($boq->status !== 'submitted') {
             return $this->error('Only submitted BOQs can be approved, revised, or rejected.', 422);

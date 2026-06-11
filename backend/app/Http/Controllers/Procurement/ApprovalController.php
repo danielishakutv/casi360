@@ -113,7 +113,18 @@ class ApprovalController extends Controller
                             ->update(['status' => 'pending', 'updated_at' => $now]);
 
                     } elseif ($activeApproval->stage === 'procurement') {
-                        // Procurement is the final stage -> PR fully approved
+                        // Procurement approves -> advances to Operations (final stage).
+                        $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
+                        $opsStage = $requisition->approvals->firstWhere('stage', 'operations');
+                        if ($opsStage) {
+                            $opsStage->update(['status' => 'pending', 'updated_at' => $now]);
+                        } else {
+                            // Legacy PR with no Operations stage -> Procurement is final.
+                            $requisition->update(['status' => 'approved']);
+                        }
+
+                    } elseif ($activeApproval->stage === 'operations') {
+                        // Operations is the final stage -> PR fully approved.
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                         $requisition->update(['status' => 'approved']);
                     }
@@ -433,7 +444,9 @@ class ApprovalController extends Controller
      */
     private function getPendingBoqs($user, string $scope): \Illuminate\Support\Collection
     {
-        if ($scope !== 'all' && !$this->userHasPermission($user, 'procurement.boq.approve')) {
+        // BOQs are approved by Operations (admins included). Only show the
+        // pending BOQ queue to users who can actually act on it.
+        if ($scope !== 'all' && !$this->authorizer->isOperationsApprover($user)) {
             return collect();
         }
 

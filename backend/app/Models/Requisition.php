@@ -113,7 +113,7 @@ class Requisition extends Model
         return $this->hasMany(RequisitionItem::class);
     }
 
-    /** New 3-stage approval chain (budget_holder → finance → procurement). */
+    /** Approval chain (budget_holder → finance → procurement → operations). */
     public function approvals()
     {
         return $this->hasMany(RequisitionApproval::class)->orderBy('stage_order');
@@ -209,7 +209,8 @@ class Requisition extends Model
      * ---------------------------------------------------------------- */
 
     /**
-     * Create (or reset) the fixed 3-stage approval chain.
+     * Create (or reset) the fixed 4-stage approval chain:
+     * Budget Holder → Finance → Procurement → Operations (final).
      * Called when a PR is submitted or re-submitted after revision.
      */
     public function createApprovalChain(): void
@@ -233,6 +234,12 @@ class Requisition extends Model
                 'stage'       => 'procurement',
                 'stage_order' => 3,
                 'stage_label' => 'Procurement',
+                'status'      => 'waiting',
+            ],
+            [
+                'stage'       => 'operations',
+                'stage_order' => 4,
+                'stage_label' => 'Operations',
                 'status'      => 'waiting',
             ],
         ]);

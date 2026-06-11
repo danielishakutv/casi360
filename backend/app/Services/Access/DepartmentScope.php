@@ -56,6 +56,21 @@ class DepartmentScope
     }
 
     /**
+     * Can this user act as the Operations approver (final stage on PR, and the
+     * approver on BOQ/RFQ)? Admins included; otherwise an Operations manager.
+     */
+    public function isOperationsApprover(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        if (in_array($user->role, ['super_admin', 'admin'], true)) {
+            return true;
+        }
+        return $this->isManagerInDepartment($user, self::OPERATIONS_CODE);
+    }
+
+    /**
      * Is the user a manager in the department identified by $code?
      */
     public function isManagerInDepartment(?User $user, string $code): bool
