@@ -23,6 +23,8 @@ class StoreBoqRequest extends FormRequest
             'department' => ['nullable', 'string', 'max:255'],
             'delivery_location' => ['nullable', 'string', 'max:500'],
             'category' => ['nullable', 'string', 'max:255'],
+            'currency' => ['nullable', 'string', 'max:10'],
+            'exchange_rate' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
 
             'signoffs' => ['nullable', 'array'],

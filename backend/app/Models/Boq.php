@@ -18,6 +18,8 @@ class Boq extends Model
         'project_code',
         'department',
         'category',
+        'currency',
+        'exchange_rate',
         'delivery_location',
         'prepared_by',
         'status',
@@ -28,6 +30,7 @@ class Boq extends Model
 
     protected $casts = [
         'date' => 'date',
+        'exchange_rate' => 'decimal:4',
         'signoffs' => 'array',
     ];
 
@@ -88,12 +91,20 @@ class Boq extends Model
             'department' => $this->department,
             'delivery_location' => $this->delivery_location,
             'category' => $this->category,
+            'currency' => $this->currency ?? 'USD',
+            'exchange_rate' => $this->exchange_rate ? (float) $this->exchange_rate : null,
             'prepared_by' => $this->prepared_by,
             'status' => $this->status,
             'date' => $this->date?->toDateString(),
             'notes' => $this->notes,
             'signoffs' => $this->signoffs,
+            // Amounts are stored in the document currency (USD by default).
+            // grand_total_ngn is the derived Naira equivalent using the budget
+            // exchange rate, for display alongside the USD figure.
             'grand_total' => (float) $this->items()->sum('total'),
+            'grand_total_ngn' => $this->exchange_rate
+                ? round((float) $this->items()->sum('total') * (float) $this->exchange_rate, 2)
+                : null,
             'item_count' => $this->items()->count(),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
