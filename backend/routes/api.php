@@ -842,7 +842,12 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
     |   GET    /api/v1/communication/notices/{id}/reads                        - Who read this notice (admin)
     |
     */
-    Route::middleware(['auth:sanctum', ForcePasswordChange::class, CacheResponse::class . ':communication,30'])->prefix('communication')->group(function () {
+    // NOTE: response caching is applied per-route below, NOT at the group level.
+    // The real-time Messages and Forum read endpoints are intentionally left
+    // UNCACHED so the frontend's lightweight polling reflects new posts within
+    // seconds. Slower-changing Notices/Emails/SMS lists keep the 30s cache via
+    // CacheResponse on their own routes.
+    Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('communication')->group(function () {
 
         // --- Messages (1-on-1 with threading) ---
         Route::get('/messages/unread-count', [MessageController::class, 'unreadCount'])
@@ -887,15 +892,17 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
                 ->middleware(PermissionMiddleware::class . ':communication.forums.create');
         });
 
-        // --- Notices ---
-        Route::get('/notices/stats', [NoticeController::class, 'stats'])
-            ->middleware(PermissionMiddleware::class . ':communication.notices.view');
-        Route::get('/notices', [NoticeController::class, 'index'])
-            ->middleware(PermissionMiddleware::class . ':communication.notices.view');
-        Route::get('/notices/{id}', [NoticeController::class, 'show'])
-            ->middleware(PermissionMiddleware::class . ':communication.notices.view');
-        Route::get('/notices/{id}/reads', [NoticeController::class, 'reads'])
-            ->middleware(PermissionMiddleware::class . ':communication.notices.view');
+        // --- Notices --- (change slowly; keep the 30s response cache)
+        Route::middleware([CacheResponse::class . ':communication,30'])->group(function () {
+            Route::get('/notices/stats', [NoticeController::class, 'stats'])
+                ->middleware(PermissionMiddleware::class . ':communication.notices.view');
+            Route::get('/notices', [NoticeController::class, 'index'])
+                ->middleware(PermissionMiddleware::class . ':communication.notices.view');
+            Route::get('/notices/{id}', [NoticeController::class, 'show'])
+                ->middleware(PermissionMiddleware::class . ':communication.notices.view');
+            Route::get('/notices/{id}/reads', [NoticeController::class, 'reads'])
+                ->middleware(PermissionMiddleware::class . ':communication.notices.view');
+        });
         Route::middleware(['throttle:60,1', InvalidateCache::class . ':communication'])->group(function () {
             Route::post('/notices', [NoticeController::class, 'store'])
                 ->middleware(PermissionMiddleware::class . ':communication.notices.create');
@@ -907,7 +914,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
 
         // --- Emails ---
         Route::get('/emails', [EmailController::class, 'index'])
-            ->middleware(PermissionMiddleware::class . ':communication.emails.view')
+            ->middleware([PermissionMiddleware::class . ':communication.emails.view', CacheResponse::class . ':communication,30'])
             ->name('communication.emails.index');
         Route::middleware(['throttle:30,1', InvalidateCache::class . ':communication'])->group(function () {
             Route::post('/emails', [EmailController::class, 'store'])
@@ -920,7 +927,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
 
         // --- SMS ---
         Route::get('/sms', [SmsController::class, 'index'])
-            ->middleware(PermissionMiddleware::class . ':communication.sms.view')
+            ->middleware([PermissionMiddleware::class . ':communication.sms.view', CacheResponse::class . ':communication,30'])
             ->name('communication.sms.index');
         Route::middleware(['throttle:30,1', InvalidateCache::class . ':communication'])->group(function () {
             Route::post('/sms', [SmsController::class, 'store'])
