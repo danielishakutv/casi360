@@ -13,6 +13,7 @@ class RolesController extends Controller
     private const ROLES = [
         'super_admin' => 'Full system access with all permissions',
         'admin' => 'Administrative access with most permissions',
+        'country_director' => 'Executive oversight — sees every department and is the final approver on payment documents',
         'manager' => 'Department-level management access',
         'staff' => 'Standard staff access with limited permissions',
     ];

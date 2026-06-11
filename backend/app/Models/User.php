@@ -95,6 +95,31 @@ class User extends Authenticatable
         return $this->role === 'super_admin';
     }
 
+    public function getIsCountryDirectorAttribute(): bool
+    {
+        return $this->role === 'country_director';
+    }
+
+    /**
+     * Whether this user sees data across every department (dashboards,
+     * cross-department lists). True for admins, the Country Director, and
+     * Operations managers/leads. Delegates to the shared DepartmentScope so
+     * the rule lives in one place.
+     */
+    public function canSeeAllDepartments(): bool
+    {
+        return app(\App\Services\Access\DepartmentScope::class)->canSeeAllDepartments($this);
+    }
+
+    /**
+     * The canonical uppercase department code for this user (e.g. "PROGRAMS"),
+     * resolved from the stored department string, or null if unset/unmatched.
+     */
+    public function departmentCode(): ?string
+    {
+        return app(\App\Services\Access\DepartmentScope::class)->userDepartmentCode($this);
+    }
+
     /* ----------------------------------------------------------------
      * Relationships
      * ---------------------------------------------------------------- */
@@ -204,12 +229,18 @@ class User extends Authenticatable
      */
     public function toAuthArray(): array
     {
+        $scope = app(\App\Services\Access\DepartmentScope::class);
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
             'role' => $this->role,
             'department' => $this->department,
+            // Resolved, canonical department code + org-wide visibility flag so
+            // the frontend can scope dashboards/menus without re-deriving them.
+            'department_code' => $scope->userDepartmentCode($this),
+            'can_see_all_departments' => $scope->canSeeAllDepartments($this),
             'phone' => $this->phone,
             'avatar' => $this->avatar,
             'status' => $this->status,
