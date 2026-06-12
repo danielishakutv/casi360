@@ -66,6 +66,11 @@ class PermissionSeeder extends Seeder
             ['module' => 'hr', 'feature' => 'holidays', 'action' => 'edit', 'description' => 'Edit holidays'],
             ['module' => 'hr', 'feature' => 'holidays', 'action' => 'delete', 'description' => 'Delete holidays'],
 
+            // --- HR: Attendance / Timesheets ---
+            ['module' => 'hr', 'feature' => 'attendance', 'action' => 'view', 'description' => 'View attendance records'],
+            ['module' => 'hr', 'feature' => 'attendance', 'action' => 'view_all', 'description' => 'View attendance and monthly timesheets for all staff'],
+            ['module' => 'hr', 'feature' => 'attendance', 'action' => 'manage', 'description' => 'Adjust or correct attendance records'],
+
             // --- Settings: System Settings ---
             ['module' => 'settings', 'feature' => 'system', 'action' => 'view', 'description' => 'View system settings'],
             ['module' => 'settings', 'feature' => 'system', 'action' => 'edit', 'description' => 'Edit system settings'],
@@ -274,6 +279,9 @@ class PermissionSeeder extends Seeder
                 'hr.holidays.create' => true,
                 'hr.holidays.edit' => true,
                 'hr.holidays.delete' => true,
+                'hr.attendance.view' => true,
+                'hr.attendance.view_all' => true,
+                'hr.attendance.manage' => true,
                 'settings.system.view' => true,
                 'settings.system.edit' => false,
                 'procurement.vendors.view' => true,
@@ -415,6 +423,9 @@ class PermissionSeeder extends Seeder
                 'hr.holidays.create' => true,
                 'hr.holidays.edit' => true,
                 'hr.holidays.delete' => false,
+                'hr.attendance.view' => true,
+                'hr.attendance.view_all' => true,
+                'hr.attendance.manage' => true,
                 'settings.system.view' => false,
                 'settings.system.edit' => false,
                 'procurement.vendors.view' => true,
@@ -577,6 +588,10 @@ class PermissionSeeder extends Seeder
                 'procurement.inventory.create' => false,
                 'procurement.inventory.edit' => false,
                 'procurement.inventory.delete' => false,
+                // Staff see their own attendance; everyone signs in/out (self-service).
+                'hr.attendance.view' => true,
+                'hr.attendance.view_all' => false,
+                'hr.attendance.manage' => false,
                 /* Anyone in the organisation can raise a Purchase Request,
                    so staff get create + edit on requisitions by default.
                    The PR's approval chain still routes the document to the
@@ -723,6 +738,9 @@ class PermissionSeeder extends Seeder
                 'procurement.vendors.create' => false,
                 'procurement.vendors.edit' => false,
                 'procurement.vendors.delete' => false,
+                'hr.attendance.view' => true,
+                'hr.attendance.view_all' => true,
+                'hr.attendance.manage' => false,
                 'procurement.purchase_orders.view' => true,
                 'procurement.purchase_orders.create' => false,
                 'procurement.purchase_orders.edit' => false,

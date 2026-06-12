@@ -39,9 +39,11 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\UserManagementController;
+use App\Http\Controllers\HR\AttendanceController;
 use App\Http\Controllers\HR\DepartmentController;
 use App\Http\Controllers\HR\DesignationController;
 use App\Http\Controllers\HR\EmployeeController;
+use App\Http\Controllers\HR\TimesheetController;
 use App\Http\Controllers\HR\HolidayController;
 use App\Http\Controllers\HR\LeaveTypeController;
 use App\Http\Controllers\HR\NoteController;
@@ -184,6 +186,43 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
     */
     Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('dashboard')->group(function () {
         Route::get('/summary', [DashboardController::class, 'summary'])->name('dashboard.summary');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | HR Attendance & Timesheets (Authenticated) — NOT cached
+    |--------------------------------------------------------------------------
+    |   Sign in/out is self-service (any authenticated user, their own record).
+    |   Left out of the cached HR group so today's sign-in status is always
+    |   fresh. Viewing all staff / adjusting records is permission-gated.
+    |
+    |   POST  /api/v1/hr/attendance/clock-in           - Sign in (self)
+    |   POST  /api/v1/hr/attendance/clock-out          - Sign out (self)
+    |   GET   /api/v1/hr/attendance/me                 - My today + recent records
+    |   GET   /api/v1/hr/attendance/today              - All staff today (view_all)
+    |   GET   /api/v1/hr/attendance                    - List (own unless view_all)
+    |   PATCH /api/v1/hr/attendance/{id}               - HR adjust (manage)
+    |   GET   /api/v1/hr/timesheets/mine               - My monthly timesheet
+    |   GET   /api/v1/hr/timesheets?month=YYYY-MM       - All staff monthly (view_all)
+    |   GET   /api/v1/hr/timesheets/{employeeId}        - One employee's timesheet
+    */
+    Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('hr')->group(function () {
+        Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn'])->middleware('throttle:30,1');
+        Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut'])->middleware('throttle:30,1');
+        Route::get('/attendance/me', [AttendanceController::class, 'me']);
+        Route::get('/attendance/today', [AttendanceController::class, 'today'])
+            ->middleware(PermissionMiddleware::class . ':hr.attendance.view_all');
+        Route::get('/attendance', [AttendanceController::class, 'index'])
+            ->middleware(PermissionMiddleware::class . ':hr.attendance.view');
+        Route::patch('/attendance/{id}', [AttendanceController::class, 'update'])
+            ->middleware(PermissionMiddleware::class . ':hr.attendance.manage');
+
+        // Monthly timesheets (derived from attendance). 'mine' before '{employeeId}'.
+        Route::get('/timesheets/mine', [TimesheetController::class, 'mine']);
+        Route::get('/timesheets', [TimesheetController::class, 'monthly'])
+            ->middleware(PermissionMiddleware::class . ':hr.attendance.view_all');
+        Route::get('/timesheets/{employeeId}', [TimesheetController::class, 'employee'])
+            ->middleware(PermissionMiddleware::class . ':hr.attendance.view');
     });
 
     /*
