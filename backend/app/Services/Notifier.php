@@ -52,6 +52,9 @@ class Notifier
 
         $targets = collect($recipients instanceof User ? [$recipients] : $recipients)
             ->filter(fn ($u) => $u instanceof User && filter_var($u->email ?? '', FILTER_VALIDATE_EMAIL))
+            // Respect each user's personal "email notifications" preference
+            // (defaults to true). In-app notifications are unaffected.
+            ->filter(fn (User $u) => ($u->email_notifications ?? true))
             ->unique('id')
             ->values();
 

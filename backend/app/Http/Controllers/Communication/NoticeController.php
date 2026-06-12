@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Notice;
 use App\Models\NoticeRead;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -136,7 +137,8 @@ class NoticeController extends Controller
             return $notice;
         });
 
-        // Email the targeted audience after the response (published only).
+        // In-app + email notifications to the targeted audience (published only).
+        NotificationService::notice($notice);
         Notifier::newNotice($notice);
 
         return $this->success([
@@ -183,8 +185,9 @@ class NoticeController extends Controller
             return $notice->fresh()->load(['author', 'audiences']);
         });
 
-        // If this update is what published the notice, email its audience.
+        // If this update is what published the notice, notify its audience.
         if (!$wasPublished && $notice->status === 'published') {
+            NotificationService::notice($notice);
             Notifier::newNotice($notice);
         }
 

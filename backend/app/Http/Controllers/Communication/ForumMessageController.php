@@ -7,6 +7,7 @@ use App\Http\Requests\Communication\StoreForumMessageRequest;
 use App\Models\AuditLog;
 use App\Models\Forum;
 use App\Models\ForumMessage;
+use App\Services\NotificationService;
 use App\Services\Notifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -102,6 +103,8 @@ class ForumMessageController extends Controller
             return $message;
         });
 
+        // In-app notifications: new post -> whole forum; reply -> the thread.
+        NotificationService::forumMessage($message, $forum);
         // Email thread participants after the response is sent (replies only).
         Notifier::newForumReply($message, $forum);
 

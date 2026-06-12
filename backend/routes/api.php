@@ -34,6 +34,7 @@
  */
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\ProfileController;
@@ -145,6 +146,7 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             // Profile management
             Route::get('/profile', [ProfileController::class, 'show'])->name('auth.profile');
             Route::patch('/profile', [ProfileController::class, 'update'])->name('auth.profile.update');
+            Route::patch('/preferences', [ProfileController::class, 'preferences'])->name('auth.preferences');
             Route::get('/activity', [ProfileController::class, 'activity'])->name('auth.activity');
             Route::delete('/account', [ProfileController::class, 'destroy'])->name('auth.account.delete');
 
@@ -186,6 +188,22 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
     */
     Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('dashboard')->group(function () {
         Route::get('/summary', [DashboardController::class, 'summary'])->name('dashboard.summary');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Notifications (Authenticated) — in-app notification bell, NOT cached
+    |--------------------------------------------------------------------------
+    |   GET  /api/v1/notifications              - List my notifications (+unread_count)
+    |   GET  /api/v1/notifications/unread-count - My unread count (polled by the bell)
+    |   POST /api/v1/notifications/read-all     - Mark all mine as read
+    |   POST /api/v1/notifications/{id}/read    - Mark one as read
+    */
+    Route::middleware(['auth:sanctum', ForcePasswordChange::class])->prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread');
+        Route::post('/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+        Route::post('/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     });
 
     /*

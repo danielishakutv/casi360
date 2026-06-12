@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Boq;
 use App\Models\BoqAuditLog;
 use App\Models\BoqItem;
+use App\Services\NotificationService;
 use App\Services\Procurement\ApprovalAuthorizer;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
@@ -270,6 +271,9 @@ class BoqController extends Controller
             $fromStatus = $boq->status;
             $boq->update(['status' => 'submitted']);
 
+            // Notify the Operations approvers that a BOQ is awaiting approval.
+            NotificationService::boqSubmitted($boq);
+
             $actor = auth()->user();
             BoqAuditLog::write(
                 $boq->id,
@@ -369,6 +373,9 @@ class BoqController extends Controller
             }
 
             $boq->update($updates);
+
+            // Notify whoever created the BOQ of the decision.
+            NotificationService::boqDecided($boq, $action);
 
             BoqAuditLog::write(
                 $boq->id,

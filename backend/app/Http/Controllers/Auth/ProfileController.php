@@ -75,6 +75,25 @@ class ProfileController extends Controller
     }
 
     /**
+     * PATCH /api/v1/auth/preferences
+     * Update the current user's notification preferences (currently just the
+     * personal email-notifications toggle). In-app notifications are always on.
+     */
+    public function preferences(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email_notifications' => ['required', 'boolean'],
+        ]);
+
+        $user = $request->user();
+        $user->update(['email_notifications' => $data['email_notifications']]);
+
+        return $this->success([
+            'user' => $user->fresh()->toAuthArray(),
+        ], 'Notification preferences updated');
+    }
+
+    /**
      * GET /api/v1/auth/activity
      *
      * Unified recent activity feed for the current user — every procurement

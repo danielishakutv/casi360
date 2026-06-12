@@ -29,6 +29,7 @@ class User extends Authenticatable
         'last_login_ip',
         'password_changed_at',
         'force_password_change',
+        'email_notifications',
     ];
 
     /**
@@ -63,6 +64,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'force_password_change' => 'boolean',
+            'email_notifications' => 'boolean',
             'password' => 'hashed',
         ];
     }
@@ -250,6 +252,7 @@ class User extends Authenticatable
             'email_verified_at' => $this->email_verified_at?->toISOString(),
             'last_login_at' => $this->last_login_at?->toISOString(),
             'force_password_change' => $this->force_password_change,
+            'email_notifications' => $this->email_notifications ?? true,
             'created_at' => $this->created_at->toISOString(),
         ];
     }

@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
+use App\Services\NotificationService;
 use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
@@ -354,8 +355,11 @@ class RequisitionController extends Controller
                 'submitted_by' => auth()->id(),
             ]);
 
-            // Reset (or create) the fixed 3-stage approval chain — always starts at budget_holder
+            // Reset (or create) the fixed approval chain — always starts at budget_holder
             $requisition->createApprovalChain();
+
+            // Notify the budget holder that a PR is awaiting their approval.
+            NotificationService::requisitionPending($requisition, 'budget_holder');
 
             $requisition->refresh();
             $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);

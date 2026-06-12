@@ -11,6 +11,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RolePermission;
+use App\Services\NotificationService;
 use App\Services\Procurement\ApprovalAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,12 +106,14 @@ class ApprovalController extends Controller
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                         $requisition->approvals()->where('stage', 'finance')
                             ->update(['status' => 'pending', 'updated_at' => $now]);
+                        NotificationService::requisitionPending($requisition, 'finance');
 
                     } elseif ($activeApproval->stage === 'finance') {
                         // Finance approves -> advances to Procurement (final stage)
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                         $requisition->approvals()->where('stage', 'procurement')
                             ->update(['status' => 'pending', 'updated_at' => $now]);
+                        NotificationService::requisitionPending($requisition, 'procurement');
 
                     } elseif ($activeApproval->stage === 'procurement') {
                         // Procurement approves -> advances to Operations (final stage).
@@ -118,15 +121,18 @@ class ApprovalController extends Controller
                         $opsStage = $requisition->approvals->firstWhere('stage', 'operations');
                         if ($opsStage) {
                             $opsStage->update(['status' => 'pending', 'updated_at' => $now]);
+                            NotificationService::requisitionPending($requisition, 'operations');
                         } else {
                             // Legacy PR with no Operations stage -> Procurement is final.
                             $requisition->update(['status' => 'approved']);
+                            NotificationService::requisitionDecided($requisition, 'approved');
                         }
 
                     } elseif ($activeApproval->stage === 'operations') {
                         // Operations is the final stage -> PR fully approved.
                         $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                         $requisition->update(['status' => 'approved']);
+                        NotificationService::requisitionDecided($requisition, 'approved');
                     }
                     break;
 
@@ -135,16 +141,19 @@ class ApprovalController extends Controller
                     $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
                     $requisition->approvals()->where('stage', 'procurement')
                         ->update(['status' => 'pending', 'updated_at' => $now]);
+                    NotificationService::requisitionPending($requisition, 'procurement');
                     break;
 
                 case 'reject':
                     $activeApproval->update(array_merge($actorData, ['status' => 'rejected']));
                     $requisition->update(['status' => 'rejected']);
+                    NotificationService::requisitionDecided($requisition, 'rejected');
                     break;
 
                 case 'revision':
                     $activeApproval->update(array_merge($actorData, ['status' => 'revision']));
                     $requisition->update(['status' => 'revision']);
+                    NotificationService::requisitionDecided($requisition, 'revision');
                     break;
             }
 
