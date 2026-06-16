@@ -80,6 +80,58 @@ class Rfp extends Model
         return $this->hasMany(RfpItem::class);
     }
 
+    /** Payment approval chain (programme_manager → finance → final_approver). */
+    public function approvals()
+    {
+        return $this->hasMany(RfpApproval::class)->orderBy('stage_order');
+    }
+
+    /* ----------------------------------------------------------------
+     * Approval chain — accessors & creation (v2 §3.3)
+     * ---------------------------------------------------------------- */
+
+    public function getActiveStageAttribute(): ?string
+    {
+        if ($this->relationLoaded('approvals')) {
+            return $this->approvals->firstWhere('status', 'pending')?->stage;
+        }
+
+        return $this->approvals()->where('status', 'pending')->value('stage');
+    }
+
+    public function getApprovalProgressAttribute(): array
+    {
+        $approvals = $this->relationLoaded('approvals') ? $this->approvals : $this->approvals()->get();
+
+        if ($approvals->isEmpty()) {
+            return ['completed' => 0, 'total' => 0];
+        }
+
+        return [
+            'completed' => $approvals->whereIn('status', ['approved', 'skipped'])->count(),
+            'total'     => $approvals->count(),
+        ];
+    }
+
+    /**
+     * Create (or reset) the 3-stage payment approval chain:
+     * Programme Manager → Finance → Final Approver. The final stage label
+     * follows the configured Final Approver (Country Director by default).
+     */
+    public function createApprovalChain(): void
+    {
+        $this->approvals()->delete();
+
+        $finalRole  = config('procurement.payment_final_approver', 'country_director');
+        $finalLabel = $finalRole === 'operations' ? 'Operations Manager' : 'Country Director';
+
+        $this->approvals()->createMany([
+            ['stage' => 'programme_manager', 'stage_order' => 1, 'stage_label' => 'Programme Manager', 'status' => 'pending'],
+            ['stage' => 'finance',           'stage_order' => 2, 'stage_label' => 'Finance',           'status' => 'waiting'],
+            ['stage' => 'final_approver',    'stage_order' => 3, 'stage_label' => $finalLabel,         'status' => 'waiting'],
+        ]);
+    }
+
     /* ----------------------------------------------------------------
      * Auto-generate RFP number
      * ---------------------------------------------------------------- */
@@ -168,6 +220,9 @@ class Rfp extends Model
             'compliance_confirmed_by' => $this->compliance_confirmed_by,
             'compliance_confirmed_at' => $this->compliance_confirmed_at?->toIso8601String(),
             'item_count' => $this->items()->count(),
+            'active_stage' => $this->active_stage,
+            'approval_progress' => $this->approval_progress,
+            'approval_chain' => $this->approvals->map->toApiArray(false)->toArray(),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
@@ -176,8 +231,9 @@ class Rfp extends Model
     public function toDetailArray(): array
     {
         return array_merge($this->toApiArray(), [
-            'items'     => $this->items->map->toApiArray()->toArray(),
-            'audit_log' => AuditLog::trailFor('rfp', $this->id),
+            'items'          => $this->items->map->toApiArray()->toArray(),
+            'approval_chain' => $this->approvals->map->toApiArray(true)->toArray(),
+            'audit_log'      => AuditLog::trailFor('rfp', $this->id),
         ]);
     }
 }

@@ -30,6 +30,7 @@ class ApprovalAuthorizer
     public const FINANCE_CODE     = 'FINANCE';
     public const PROCUREMENT_CODE = 'PROCUREMENT';
     public const OPERATIONS_CODE  = 'OPERATIONS';
+    public const PROGRAMS_CODE    = 'PROGRAMS';
 
     /** In-request cache of Department lookups keyed by code. */
     private array $departmentByCode = [];
@@ -102,6 +103,89 @@ class ApprovalAuthorizer
         }
 
         return $this->isManagerInDepartment($user, self::PROCUREMENT_CODE);
+    }
+
+    /* ----------------------------------------------------------------
+     * Payment Request (RFP) approval — v2 §3.3
+     * Programme Manager → Finance → Final Approver.
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Can $user act on $stage of a Payment Request right now?
+     *
+     * @return array{allowed:bool,reason:?string}
+     */
+    public function canActOnRfpStage(User $user, string $stage): array
+    {
+        if ($this->isAdmin($user)) {
+            return ['allowed' => true, 'reason' => null];
+        }
+
+        return match ($stage) {
+            'programme_manager' => $this->isManagerInDepartment($user, self::PROGRAMS_CODE)
+                ? ['allowed' => true, 'reason' => null]
+                : ['allowed' => false, 'reason' => 'Only a Programme Manager (a manager in the Programs department) or an administrator can approve at this stage.'],
+            'finance' => $this->canActAsFinance($user),
+            'final_approver' => $this->canActAsPaymentFinalApprover($user)
+                ? ['allowed' => true, 'reason' => null]
+                : ['allowed' => false, 'reason' => 'Only the designated Final Approver (' . $this->paymentFinalApproverLabel() . ') or an administrator can give final approval.'],
+            default => ['allowed' => false, 'reason' => "Unknown approval stage: {$stage}."],
+        };
+    }
+
+    /**
+     * Stages of a Payment Request the user is potentially eligible to act on
+     * (used to filter the pending-approvals dashboard before per-RFP checks).
+     */
+    public function eligibleRfpStagesFor(User $user): array
+    {
+        if ($this->isAdmin($user)) {
+            return ['programme_manager', 'finance', 'final_approver'];
+        }
+
+        $stages = [];
+        if ($this->isManagerInDepartment($user, self::PROGRAMS_CODE)) {
+            $stages[] = 'programme_manager';
+        }
+        if ($this->isManagerInDepartment($user, self::FINANCE_CODE)) {
+            $stages[] = 'finance';
+        }
+        if ($this->canActAsPaymentFinalApprover($user)) {
+            $stages[] = 'final_approver';
+        }
+
+        return $stages;
+    }
+
+    /**
+     * The role configured as the payment-chain Final Approver (v2 §3.3).
+     * 'country_director' (default) or 'operations'. Editable via .env.
+     */
+    public function paymentFinalApproverRole(): string
+    {
+        $role = config('procurement.payment_final_approver', 'country_director');
+        return $role === 'operations' ? 'operations' : 'country_director';
+    }
+
+    public function paymentFinalApproverLabel(): string
+    {
+        return $this->paymentFinalApproverRole() === 'operations' ? 'Operations Manager' : 'Country Director';
+    }
+
+    /**
+     * Can this user give FINAL approval on a Payment Request? Resolved from the
+     * configured role: a Country Director (by role) or an Operations manager.
+     * Admins always may.
+     */
+    public function canActAsPaymentFinalApprover(User $user): bool
+    {
+        if ($this->isAdmin($user)) {
+            return true;
+        }
+
+        return $this->paymentFinalApproverRole() === 'operations'
+            ? $this->isManagerInDepartment($user, self::OPERATIONS_CODE)
+            : $user->role === 'country_director';
     }
 
     /**

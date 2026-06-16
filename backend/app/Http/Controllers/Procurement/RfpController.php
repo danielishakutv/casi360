@@ -28,7 +28,7 @@ class RfpController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Rfp::with('vendor');
+        $query = Rfp::with(['vendor', 'approvals']);
 
         if ($this->scopeService->shouldScope($request->user(), 'procurement.rfp.view_all', $request)) {
             $this->scopeService->applyToRfps($query, $request->user());
@@ -114,7 +114,9 @@ class RfpController extends Controller
             unset($data['items']);
 
             $data['rfp_number'] = Rfp::generateRfpNumber();
-            $data['status'] = $data['status'] ?? 'draft';
+            // Raising a payment request enters the approval chain by default
+            // (v2 §3.3). A caller may pass status=draft to stage one first.
+            $data['status'] = $data['status'] ?? 'pending_approval';
 
             // v2 §3.2 — snapshot who affirmed the compliance checklist and when
             // (server-side, never trusted from the client). When procedures were
@@ -162,7 +164,12 @@ class RfpController extends Controller
                 RfpItem::create($item);
             }
 
-            $rfp->load(['vendor', 'items']);
+            // Open the payment approval chain unless this was saved as a draft.
+            if ($rfp->status === 'pending_approval') {
+                $rfp->createApprovalChain();
+            }
+
+            $rfp->load(['vendor', 'items', 'approvals']);
 
             AuditLog::record(
                 auth()->id(),
@@ -180,11 +187,43 @@ class RfpController extends Controller
     }
 
     /**
+     * POST /api/v1/procurement/rfp/{id}/submit
+     *
+     * (Re)submit a draft / revision / rejected payment request for approval —
+     * resets the chain to Programme Manager. The compliance checklist must be
+     * satisfied first (v2 §3.2/§3.3).
+     */
+    public function submit(string $id): JsonResponse
+    {
+        $rfp = Rfp::with('approvals')->findOrFail($id);
+
+        if (!in_array($rfp->status, ['draft', 'revision', 'rejected'], true)) {
+            return $this->error('Only draft, revision, or rejected payment requests can be submitted for approval.', 422);
+        }
+
+        if (empty($rfp->procurement_compliance)) {
+            return $this->error('Complete the procurement compliance checklist before submitting this payment request.', 422);
+        }
+
+        return DB::transaction(function () use ($rfp) {
+            $rfp->update(['status' => 'pending_approval']);
+            $rfp->createApprovalChain();
+            $rfp->load(['vendor', 'items', 'approvals']);
+
+            AuditLog::record(auth()->id(), 'rfp_submitted', 'rfp', $rfp->id, null, $rfp->toApiArray());
+
+            return $this->success([
+                'rfp' => $rfp->toDetailArray(),
+            ], 'Payment request submitted for approval');
+        });
+    }
+
+    /**
      * GET /api/v1/procurement/rfp/{id}
      */
     public function show(string $id): JsonResponse
     {
-        $rfp = Rfp::with(['vendor', 'items', 'invoice'])->findOrFail($id);
+        $rfp = Rfp::with(['vendor', 'items', 'invoice', 'approvals'])->findOrFail($id);
 
         return $this->success([
             'rfp' => array_merge(
@@ -210,10 +249,10 @@ class RfpController extends Controller
 
         $incomingStatus = $request->input('status');
         $isApprovedToPaid = $rfp->status === 'approved' && $incomingStatus === 'paid';
-        $canEdit = in_array($rfp->status, ['draft', 'pending', 'submitted'], true) || $isApprovedToPaid;
+        $canEdit = in_array($rfp->status, ['draft', 'pending', 'submitted', 'revision'], true) || $isApprovedToPaid;
 
         if (!$canEdit) {
-            return $this->error('Only draft, pending or submitted RFPs can be edited (approved RFPs may only be marked as paid).', 422);
+            return $this->error('Only draft, revision, or submitted payment requests can be edited (approved ones may only be marked as paid).', 422);
         }
 
         $oldValues = $rfp->toApiArray();

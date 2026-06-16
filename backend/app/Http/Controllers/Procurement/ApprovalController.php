@@ -10,6 +10,7 @@ use App\Models\Boq;
 use App\Models\PurchaseOrder;
 use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
+use App\Models\Rfp;
 use App\Models\RolePermission;
 use App\Services\NotificationService;
 use App\Services\Procurement\ApprovalAuthorizer;
@@ -194,6 +195,102 @@ class ApprovalController extends Controller
     }
 
     /* ----------------------------------------------------------------
+     * Payment Request (RFP) approval — v2 §3.3
+     * programme_manager -> finance -> final_approver
+     * ---------------------------------------------------------------- */
+
+    /**
+     * PATCH /api/v1/procurement/rfp/{id}/approval
+     */
+    public function processRfp(ProcessApprovalRequest $request, string $id): JsonResponse
+    {
+        $rfp = Rfp::with(['approvals', 'vendor', 'items'])->findOrFail($id);
+
+        if (!in_array($rfp->status, ['pending_approval', 'submitted'], true)) {
+            return $this->error('This payment request is not awaiting approval.', 422);
+        }
+
+        $user   = $request->user();
+        $data   = $request->validated();
+        $action = $data['action'];
+
+        if ($action === 'forward') {
+            return $this->error('Forwarding is not supported on payment requests.', 422);
+        }
+
+        $activeApproval = $rfp->approvals->where('status', 'pending')->sortBy('stage_order')->first();
+        if (!$activeApproval) {
+            return $this->error('This approval stage is not currently awaiting action.', 422);
+        }
+
+        $auth = $this->authorizer->canActOnRfpStage($user, $activeApproval->stage);
+        if (!$auth['allowed']) {
+            return $this->error($auth['reason'] ?? 'You are not authorised to approve at the current stage.', 403);
+        }
+
+        return DB::transaction(function () use ($data, $rfp, $activeApproval, $user) {
+            $action     = $data['action'];
+            $comments   = $data['comments'] ?? null;
+            $now        = now();
+            $stageLabel = $activeApproval->stage_label;
+            $fromStatus = $rfp->status;
+
+            $actorData = [
+                'actor_id'       => $user->id,
+                'actor_name'     => $user->name,
+                'actor_position' => $user->department ?? null,
+                'comments'       => $comments,
+                'decided_at'     => $now,
+            ];
+
+            switch ($action) {
+                case 'approve':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
+                    // Advance to the next waiting stage, or finalise.
+                    $next = $rfp->approvals->where('status', 'waiting')->sortBy('stage_order')->first();
+                    if ($next) {
+                        $next->update(['status' => 'pending', 'updated_at' => $now]);
+                    } else {
+                        $rfp->update(['status' => 'approved']);
+                    }
+                    break;
+
+                case 'reject':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'rejected']));
+                    $rfp->update(['status' => 'rejected']);
+                    break;
+
+                case 'revision':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'revision']));
+                    $rfp->update(['status' => 'revision']);
+                    break;
+            }
+
+            $rfp->refresh();
+            $rfp->load(['vendor', 'items', 'approvals']);
+
+            AuditLog::record(
+                $user->id,
+                'rfp_' . $action,
+                'rfp',
+                $rfp->id,
+                ['status' => $fromStatus],
+                ['status' => $rfp->status, 'stage' => $activeApproval->stage, 'action' => $action]
+            );
+
+            $messages = [
+                'approve'  => "Payment request approved by {$stageLabel}",
+                'reject'   => "Payment request rejected by {$stageLabel}",
+                'revision' => "Payment request sent for revision by {$stageLabel}",
+            ];
+
+            return $this->success([
+                'rfp' => $rfp->toDetailArray(),
+            ], $messages[$action]);
+        });
+    }
+
+    /* ----------------------------------------------------------------
      * Pending approvals dashboard
      * ---------------------------------------------------------------- */
 
@@ -255,11 +352,65 @@ class ApprovalController extends Controller
         /* ---- BOQs (submitted + user has procurement.boq.approve) ---- */
         $boqs = $this->getPendingBoqs($user, $scope);
 
+        /* ---- Payment Requests (RFP) — filtered by the caller's payment stage ---- */
+        $rfps = $this->getPendingRfps($user, $scope);
+
         return $this->success([
             'purchase_orders' => $purchaseOrders,
             'requisitions'    => $requisitions,
             'boqs'            => $boqs,
+            'rfps'            => $rfps,
         ]);
+    }
+
+    /**
+     * Payment requests awaiting the caller's action (v2 §3.3). 'all' scope
+     * returns every in-flight RFP; 'mine' (default) narrows to RFPs whose
+     * currently-pending stage the caller can act on.
+     */
+    private function getPendingRfps($user, string $scope): \Illuminate\Support\Collection
+    {
+        $query = Rfp::with(['vendor', 'approvals'])->where('status', 'pending_approval');
+
+        if ($scope === 'all') {
+            return $query->orderByDesc('updated_at')->get()->map(fn ($rfp) => $this->toPendingRfpArray($rfp));
+        }
+
+        $eligibleStages = $this->authorizer->eligibleRfpStagesFor($user);
+        if (empty($eligibleStages)) {
+            return collect();
+        }
+
+        $query->whereHas('approvals', function ($q) use ($eligibleStages) {
+            $q->where('status', 'pending')->whereIn('stage', $eligibleStages);
+        });
+
+        return $query->orderByDesc('updated_at')->get()
+            ->filter(function ($rfp) use ($user) {
+                $active = $rfp->approvals->firstWhere('status', 'pending');
+                return $active && $this->authorizer->canActOnRfpStage($user, $active->stage)['allowed'];
+            })
+            ->map(fn ($rfp) => $this->toPendingRfpArray($rfp))
+            ->values();
+    }
+
+    private function toPendingRfpArray(Rfp $rfp): array
+    {
+        return [
+            'id'                => $rfp->id,
+            'rfp_number'        => $rfp->rfp_number,
+            'payee'             => $rfp->payee,
+            'vendor_name'       => $rfp->vendor?->name,
+            'currency'          => $rfp->currency,
+            'total_amount'      => (float) $rfp->total_amount,
+            'department'        => $rfp->department,
+            'status'            => $rfp->status,
+            'date'              => $rfp->date?->toDateString(),
+            'submitted_at'      => $rfp->updated_at?->toISOString(),
+            'active_stage'      => $rfp->active_stage,
+            'approval_progress' => $rfp->approval_progress,
+            'approval_chain'    => $rfp->approvals->map->toApiArray(false)->toArray(),
+        ];
     }
 
     /* ----------------------------------------------------------------

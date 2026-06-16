@@ -752,6 +752,12 @@ Route::middleware([SecurityHeaders::class, ETagResponse::class])->prefix('v1')->
             Route::delete('/rfp/{id}', [RfpController::class, 'destroy'])
                 ->middleware(PermissionMiddleware::class . ':procurement.rfp.delete')
                 ->name('procurement.rfp.destroy');
+            // v2 §3.3 — payment approval chain (PgM → Finance → Final Approver).
+            Route::post('/rfp/{id}/submit', [RfpController::class, 'submit'])
+                ->middleware(PermissionMiddleware::class . ':procurement.rfp.create')
+                ->name('procurement.rfp.submit');
+            Route::patch('/rfp/{id}/approval', [ApprovalController::class, 'processRfp'])
+                ->name('procurement.rfp.approval');
         });
 
         // --- Invoices (Vendor Invoices) ---
