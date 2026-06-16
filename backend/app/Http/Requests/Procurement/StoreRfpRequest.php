@@ -16,6 +16,13 @@ class StoreRfpRequest extends FormRequest
         return [
             'po_reference' => ['nullable', 'string', 'max:255'],
             'grn_reference' => ['nullable', 'string', 'max:255'],
+            // Multi-selected PR/PO/GRN reference numbers (searchable dropdowns).
+            'pr_references' => ['nullable', 'array'],
+            'pr_references.*' => ['string', 'max:255'],
+            'po_references' => ['nullable', 'array'],
+            'po_references.*' => ['string', 'max:255'],
+            'grn_references' => ['nullable', 'array'],
+            'grn_references.*' => ['string', 'max:255'],
             'project_code' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'uuid', 'exists:vendors,id'],
             // The supplier invoice this RFP pays. Optional for back-compat

@@ -16,6 +16,12 @@ class UpdateRfpRequest extends FormRequest
         return [
             'po_reference' => ['nullable', 'string', 'max:255'],
             'grn_reference' => ['nullable', 'string', 'max:255'],
+            'pr_references' => ['nullable', 'array'],
+            'pr_references.*' => ['string', 'max:255'],
+            'po_references' => ['nullable', 'array'],
+            'po_references.*' => ['string', 'max:255'],
+            'grn_references' => ['nullable', 'array'],
+            'grn_references.*' => ['string', 'max:255'],
             'project_code' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'uuid', 'exists:vendors,id'],
             'invoice_id' => ['nullable', 'uuid', 'exists:invoices,id'],

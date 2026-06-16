@@ -128,6 +128,15 @@ class RfpController extends Controller
                 }
             }
 
+            // Mirror the first selected PO/GRN reference onto the canonical
+            // singular columns so the document-chain breadcrumb keeps resolving.
+            if (empty($data['po_reference']) && !empty($data['po_references'][0])) {
+                $data['po_reference'] = $data['po_references'][0];
+            }
+            if (empty($data['grn_reference']) && !empty($data['grn_references'][0])) {
+                $data['grn_reference'] = $data['grn_references'][0];
+            }
+
             // If line items provided, compute subtotal from them
             if (!empty($items)) {
                 $subtotal = 0;
