@@ -105,6 +105,34 @@ class ApprovalAuthorizer
         return $this->isManagerInDepartment($user, self::PROCUREMENT_CODE);
     }
 
+    /**
+     * Segregation of duties (v2 §4 — ED Key Compliance Principle): within a
+     * single request the person who raised it cannot approve it, and no one
+     * may act on more than one approval stage (request ≠ approve, and approver
+     * roles stay distinct). super_admin is the technical break-glass and is
+     * exempt; everyone else (including admins) is held to it.
+     *
+     * @param array $raiserIds     user ids that raised/submitted the document
+     * @param array $priorActorIds actor ids that already decided a stage
+     * @return array{allowed:bool,reason:?string}
+     */
+    public function passesSegregation(User $user, array $raiserIds, array $priorActorIds): array
+    {
+        if ($user->role === 'super_admin') {
+            return ['allowed' => true, 'reason' => null];
+        }
+
+        if (in_array($user->id, array_filter($raiserIds), true)) {
+            return ['allowed' => false, 'reason' => 'Segregation of duties: you raised this request, so you cannot also approve it.'];
+        }
+
+        if (in_array($user->id, array_filter($priorActorIds), true)) {
+            return ['allowed' => false, 'reason' => 'Segregation of duties: you have already acted on another stage of this request and cannot approve a second stage.'];
+        }
+
+        return ['allowed' => true, 'reason' => null];
+    }
+
     /* ----------------------------------------------------------------
      * Payment Request (RFP) approval — v2 §3.3
      * Programme Manager → Finance → Final Approver.

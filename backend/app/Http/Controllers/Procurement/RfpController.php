@@ -114,6 +114,9 @@ class RfpController extends Controller
             unset($data['items']);
 
             $data['rfp_number'] = Rfp::generateRfpNumber();
+            // Record the raiser for segregation of duties (v2 §4) — they may
+            // not later approve this payment request.
+            $data['raised_by'] = auth()->id();
             // Raising a payment request enters the approval chain by default
             // (v2 §3.3). A caller may pass status=draft to stage one first.
             $data['status'] = $data['status'] ?? 'pending_approval';

@@ -13,6 +13,7 @@ class Rfp extends Model
 
     protected $fillable = [
         'rfp_number',
+        'raised_by',
         'invoice_id',
         'po_reference',
         'grn_reference',
@@ -187,6 +188,7 @@ class Rfp extends Model
         return [
             'id' => $this->id,
             'rfp_number' => $this->rfp_number,
+            'raised_by' => $this->raised_by,
             'invoice_id' => $this->invoice_id,
             'invoice_number' => $this->invoice?->invoice_number,
             'po_reference' => $this->po_reference,

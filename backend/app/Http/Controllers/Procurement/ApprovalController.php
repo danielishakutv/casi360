@@ -77,6 +77,17 @@ class ApprovalController extends Controller
             return $this->error($auth['reason'] ?? 'You are not authorised to approve at the current stage.', 403);
         }
 
+        // Segregation of duties (v2 §4): the raiser can't approve their own
+        // request, and no one may act on more than one stage of it.
+        $sod = $this->authorizer->passesSegregation(
+            $user,
+            [$requisition->requested_by, $requisition->submitted_by],
+            $requisition->approvals->pluck('actor_id')->all()
+        );
+        if (!$sod['allowed']) {
+            return $this->error($sod['reason'], 403);
+        }
+
         // 'forward' is only meaningful at the finance stage (approve + advance to procurement)
         if ($action === 'forward' && $activeApproval->stage !== 'finance') {
             return $this->error('Forward to Procurement is only available at the Finance stage.', 422);
@@ -226,6 +237,17 @@ class ApprovalController extends Controller
         $auth = $this->authorizer->canActOnRfpStage($user, $activeApproval->stage);
         if (!$auth['allowed']) {
             return $this->error($auth['reason'] ?? 'You are not authorised to approve at the current stage.', 403);
+        }
+
+        // Segregation of duties (v2 §4): the raiser can't approve, and no one
+        // may act on more than one stage of the same payment request.
+        $sod = $this->authorizer->passesSegregation(
+            $user,
+            [$rfp->raised_by],
+            $rfp->approvals->pluck('actor_id')->all()
+        );
+        if (!$sod['allowed']) {
+            return $this->error($sod['reason'], 403);
         }
 
         return DB::transaction(function () use ($data, $rfp, $activeApproval, $user) {
@@ -388,7 +410,14 @@ class ApprovalController extends Controller
         return $query->orderByDesc('updated_at')->get()
             ->filter(function ($rfp) use ($user) {
                 $active = $rfp->approvals->firstWhere('status', 'pending');
-                return $active && $this->authorizer->canActOnRfpStage($user, $active->stage)['allowed'];
+                if (!$active || !$this->authorizer->canActOnRfpStage($user, $active->stage)['allowed']) {
+                    return false;
+                }
+                return $this->authorizer->passesSegregation(
+                    $user,
+                    [$rfp->raised_by],
+                    $rfp->approvals->pluck('actor_id')->all()
+                )['allowed'];
             })
             ->map(fn ($rfp) => $this->toPendingRfpArray($rfp))
             ->values();
@@ -566,7 +595,15 @@ class ApprovalController extends Controller
                 if (!$active) {
                     return false;
                 }
-                return $this->authorizer->canActOnStage($user, $req, $active->stage)['allowed'];
+                if (!$this->authorizer->canActOnStage($user, $req, $active->stage)['allowed']) {
+                    return false;
+                }
+                // Hide items the caller can't approve under segregation of duties.
+                return $this->authorizer->passesSegregation(
+                    $user,
+                    [$req->requested_by, $req->submitted_by],
+                    $req->approvals->pluck('actor_id')->all()
+                )['allowed'];
             })
             ->map(fn ($req) => $this->toPendingArray($req))
             ->values();
