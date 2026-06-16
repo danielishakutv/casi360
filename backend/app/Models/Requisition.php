@@ -212,23 +212,42 @@ class Requisition extends Model
      * Create (or reset) the fixed 4-stage approval chain:
      * Budget Holder → Finance → Procurement → Operations (final).
      * Called when a PR is submitted or re-submitted after revision.
+     *
+     * When $skipBudgetHolder is true (originator-skip, v2 §3.4 — the requester
+     * IS the budget holder), the Budget Holder stage is recorded as 'skipped'
+     * with a system snapshot and the chain opens at Finance instead. 'skipped'
+     * already counts as completed in getApprovalProgressAttribute(), and
+     * getActiveStageAttribute() then resolves to 'finance' automatically.
      */
-    public function createApprovalChain(): void
+    public function createApprovalChain(bool $skipBudgetHolder = false): void
     {
         $this->approvals()->delete();
 
+        $budgetHolderRow = [
+            'stage'       => 'budget_holder',
+            'stage_order' => 1,
+            'stage_label' => 'Budget Holder',
+            'status'      => 'pending',
+        ];
+
+        $financeStatus = 'waiting';
+
+        if ($skipBudgetHolder) {
+            $budgetHolderRow['status']         = 'skipped';
+            $budgetHolderRow['actor_name']     = 'System (originator auto-skip)';
+            $budgetHolderRow['actor_position'] = 'Automated';
+            $budgetHolderRow['comments']       = 'Auto-skipped: the budget holder raised this request (segregation of duties).';
+            $budgetHolderRow['decided_at']     = now();
+            $financeStatus = 'pending';
+        }
+
         $this->approvals()->createMany([
-            [
-                'stage'       => 'budget_holder',
-                'stage_order' => 1,
-                'stage_label' => 'Budget Holder',
-                'status'      => 'pending',
-            ],
+            $budgetHolderRow,
             [
                 'stage'       => 'finance',
                 'stage_order' => 2,
                 'stage_label' => 'Finance',
-                'status'      => 'waiting',
+                'status'      => $financeStatus,
             ],
             [
                 'stage'       => 'procurement',

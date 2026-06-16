@@ -104,6 +104,72 @@ class ApprovalAuthorizer
         return $this->isManagerInDepartment($user, self::PROCUREMENT_CODE);
     }
 
+    /**
+     * True when the PR's Budget Holder is the same person who raised/submitted
+     * it (matched by email). Drives the originator-skip rule (v2 §3.4) and the
+     * segregation-of-duties principle at the Budget Holder stage: a requester
+     * must not approve their own request.
+     *
+     * Role is irrelevant here — this is about identity, so admins are NOT
+     * special-cased. The match is by email because the Budget Holder is an
+     * Employee record while the requester/submitter are User records, and email
+     * is the canonical link between the two (same convention as the per-stage
+     * authorization above).
+     */
+    public function budgetHolderIsOriginator(Requisition $requisition): bool
+    {
+        $holderEmail = $this->budgetHolderEmail($requisition);
+        if (!$holderEmail) {
+            return false;
+        }
+
+        foreach ($this->originatorEmails($requisition) as $email) {
+            if ($email !== '' && strcasecmp($email, $holderEmail) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve the Budget Holder's email: the explicitly-assigned budget holder,
+     * else the linked project's manager (legacy fallback). Null when neither
+     * can be resolved.
+     */
+    private function budgetHolderEmail(Requisition $requisition): ?string
+    {
+        if ($requisition->budget_holder_id) {
+            $requisition->loadMissing('budgetHolder');
+            $email = $requisition->budgetHolder?->email;
+            if ($email) {
+                return $email;
+            }
+        }
+
+        if ($requisition->project_id) {
+            $requisition->loadMissing('project.projectManager');
+            return $requisition->project?->projectManager?->email;
+        }
+
+        return null;
+    }
+
+    /**
+     * Emails of the people who raised the PR — the requester and the submitter.
+     *
+     * @return string[]
+     */
+    private function originatorEmails(Requisition $requisition): array
+    {
+        $requisition->loadMissing(['requestedBy', 'submittedBy']);
+
+        return array_values(array_filter([
+            $requisition->requestedBy?->email,
+            $requisition->submittedBy?->email,
+        ]));
+    }
+
     /* ----------------------------------------------------------------
      * Internals
      * ---------------------------------------------------------------- */

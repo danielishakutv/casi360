@@ -11,6 +11,7 @@ use App\Models\Requisition;
 use App\Models\RequisitionAuditLog;
 use App\Models\RequisitionItem;
 use App\Services\NotificationService;
+use App\Services\Procurement\ApprovalAuthorizer;
 use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class RequisitionController extends Controller
     public function __construct(
         private DocumentScopeService $scopeService,
         private DocumentChainResolver $chainResolver,
+        private ApprovalAuthorizer $authorizer,
     ) {
     }
 
@@ -355,11 +357,21 @@ class RequisitionController extends Controller
                 'submitted_by' => auth()->id(),
             ]);
 
-            // Reset (or create) the fixed approval chain — always starts at budget_holder
-            $requisition->createApprovalChain();
+            // Originator-skip (v2 §3.4): when the requester is also the budget
+            // holder, auto-skip the Budget Holder stage so the chain opens at
+            // Finance. Gated by config so the ED can disable it without a deploy.
+            $skipBudgetHolder = config('procurement.originator_skip', true)
+                && $this->authorizer->budgetHolderIsOriginator($requisition);
 
-            // Notify the budget holder that a PR is awaiting their approval.
-            NotificationService::requisitionPending($requisition, 'budget_holder');
+            // Reset (or create) the approval chain — opens at budget_holder, or
+            // at finance when the originator-skip applies.
+            $requisition->createApprovalChain($skipBudgetHolder);
+
+            // Notify whoever now owns the first open stage.
+            NotificationService::requisitionPending(
+                $requisition,
+                $skipBudgetHolder ? 'finance' : 'budget_holder'
+            );
 
             $requisition->refresh();
             $requisition->load(['department', 'requestedBy', 'submittedBy', 'items', 'approvals', 'project']);
@@ -381,6 +393,22 @@ class RequisitionController extends Controller
                 $fromStatus,
                 'pending_approval'
             );
+
+            // Record the auto-skip in the PR's own audit trail. actor_id must be
+            // a real user (FK + NOT NULL), so we attribute it to the submitter
+            // who triggered it; the action name makes the automation explicit.
+            if ($skipBudgetHolder) {
+                RequisitionAuditLog::write(
+                    $requisition->id,
+                    auth()->id(),
+                    'System (originator auto-skip)',
+                    'budget_holder_auto_skip',
+                    'pending_approval',
+                    'pending_approval',
+                    'budget_holder',
+                    'Budget Holder stage auto-skipped: requester is the budget holder (segregation of duties).'
+                );
+            }
 
             return $this->success([
                 'requisition' => $requisition->toDetailArray(),
