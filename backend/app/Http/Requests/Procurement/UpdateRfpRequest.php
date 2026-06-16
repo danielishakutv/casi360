@@ -43,6 +43,13 @@ class UpdateRfpRequest extends FormRequest
             'supporting_docs' => ['nullable', 'array'],
             'supporting_docs.*' => ['string'],
 
+            // v2 §3.2 compliance fields — editable on draft RFPs. The hard gate
+            // lives on create (StoreRfpRequest); here they stay optional so
+            // partial edits don't fail, while a waiver still needs its evidence.
+            'procurement_compliance' => ['nullable', 'in:followed,waived'],
+            'compliance_justification' => ['nullable', 'required_if:procurement_compliance,waived', 'string', 'max:2000'],
+            'compliance_document_url' => ['nullable', 'required_if:procurement_compliance,waived', 'string', 'max:2000'],
+
             'items' => ['sometimes', 'array'],
             'items.*.id' => ['nullable', 'uuid'],
             'items.*.description' => ['required', 'string', 'max:500'],

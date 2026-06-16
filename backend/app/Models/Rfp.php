@@ -35,6 +35,11 @@ class Rfp extends Model
         'notes',
         'signoffs',
         'supporting_docs',
+        'procurement_compliance',
+        'compliance_justification',
+        'compliance_document_url',
+        'compliance_confirmed_by',
+        'compliance_confirmed_at',
     ];
 
     protected $casts = [
@@ -47,6 +52,7 @@ class Rfp extends Model
         'exchange_rate' => 'decimal:4',
         'signoffs' => 'array',
         'supporting_docs' => 'array',
+        'compliance_confirmed_at' => 'datetime',
     ];
 
     /* ----------------------------------------------------------------
@@ -147,6 +153,11 @@ class Rfp extends Model
             'notes' => $this->notes,
             'signoffs' => $this->signoffs,
             'supporting_docs' => $this->supporting_docs,
+            'procurement_compliance' => $this->procurement_compliance,
+            'compliance_justification' => $this->compliance_justification,
+            'compliance_document_url' => $this->compliance_document_url,
+            'compliance_confirmed_by' => $this->compliance_confirmed_by,
+            'compliance_confirmed_at' => $this->compliance_confirmed_at?->toIso8601String(),
             'item_count' => $this->items()->count(),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

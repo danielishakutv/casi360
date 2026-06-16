@@ -116,6 +116,18 @@ class RfpController extends Controller
             $data['rfp_number'] = Rfp::generateRfpNumber();
             $data['status'] = $data['status'] ?? 'draft';
 
+            // v2 §3.2 — snapshot who affirmed the compliance checklist and when
+            // (server-side, never trusted from the client). When procedures were
+            // followed, clear any stray waiver evidence so it can't linger.
+            if (!empty($data['procurement_compliance'])) {
+                $data['compliance_confirmed_by'] = auth()->id();
+                $data['compliance_confirmed_at'] = now();
+                if ($data['procurement_compliance'] === 'followed') {
+                    $data['compliance_justification'] = null;
+                    $data['compliance_document_url'] = null;
+                }
+            }
+
             // If line items provided, compute subtotal from them
             if (!empty($items)) {
                 $subtotal = 0;

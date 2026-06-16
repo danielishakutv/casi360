@@ -47,6 +47,13 @@ class StoreRfpRequest extends FormRequest
             'supporting_docs' => ['nullable', 'array'],
             'supporting_docs.*' => ['string'],
 
+            // v2 §3.2 — mandatory procurement compliance gate. A payment request
+            // cannot be raised without affirming procedures were followed OR
+            // waived; a waiver requires a justification + a document link/reference.
+            'procurement_compliance' => ['required', 'in:followed,waived'],
+            'compliance_justification' => ['nullable', 'required_if:procurement_compliance,waived', 'string', 'max:2000'],
+            'compliance_document_url' => ['nullable', 'required_if:procurement_compliance,waived', 'string', 'max:2000'],
+
             'items' => ['nullable', 'array'],
             'items.*.description' => ['required', 'string', 'max:500'],
             'items.*.project_code' => ['nullable', 'string', 'max:255'],
@@ -54,6 +61,16 @@ class StoreRfpRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
             'items.*.dept' => ['nullable', 'string', 'max:255'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'procurement_compliance.required' => 'Confirm whether procurement procedures were followed or waived before raising this payment request.',
+            'procurement_compliance.in' => 'Procurement compliance must be either "followed" or "waived".',
+            'compliance_justification.required_if' => 'A justification is required when the procurement process is waived.',
+            'compliance_document_url.required_if' => 'A link or reference to the justification document is required when the procurement process is waived.',
         ];
     }
 }
