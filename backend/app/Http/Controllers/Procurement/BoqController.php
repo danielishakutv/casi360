@@ -286,8 +286,9 @@ class BoqController extends Controller
             $boq->update(['status' => 'pending_approval']);
             $boq->createApprovalChain($skipBudgetHolder);
 
-            // Notify whoever now owns the first open stage.
-            NotificationService::boqSubmitted($boq);
+            // Notify whoever now owns the first open stage (Budget Holder, or
+            // Finance when the Budget Holder stage was auto-skipped).
+            NotificationService::boqPending($boq, $skipBudgetHolder ? 'finance' : 'budget_holder');
 
             $actor = auth()->user();
             BoqAuditLog::write($boq->id, $actor?->id, $actor?->name ?? 'System', 'submitted');
@@ -369,6 +370,7 @@ class BoqController extends Controller
             $now        = now();
             $fromStatus = $boq->status;
             $stageLabel = $activeApproval->stage_label;
+            $nextStage  = null;
 
             $actorData = [
                 'actor_id'       => $user->id,
@@ -398,6 +400,7 @@ class BoqController extends Controller
                     $next = $boq->approvals->where('status', 'waiting')->sortBy('stage_order')->first();
                     if ($next) {
                         $next->update(['status' => 'pending', 'updated_at' => $now]);
+                        $nextStage = $next->stage;
                     } else {
                         $boqUpdates['status'] = 'approved';
                     }
@@ -415,7 +418,13 @@ class BoqController extends Controller
                     break;
             }
 
-            NotificationService::boqDecided($boq, $action);
+            // Notify: an advance pings the next approver; a final approve /
+            // revision / reject pings whoever raised the BOQ.
+            if ($nextStage) {
+                NotificationService::boqPending($boq, $nextStage);
+            } else {
+                NotificationService::boqDecided($boq, $action);
+            }
 
             $auditAction = $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'revision');
             BoqAuditLog::write($boq->id, $user->id, $user->name, $auditAction, $comments);

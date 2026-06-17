@@ -100,6 +100,56 @@ class Notifier
      * Event helpers
      * ================================================================ */
 
+    /**
+     * A document reached an approver's stage — email the approver(s) that it
+     * needs their action. Low-volume + actionable, so this is exactly the kind
+     * of email worth sending even on a tight plan.
+     */
+    public static function approvalNeeded($recipients, string $docLabel, string $number, ?string $title, string $actionPath = '/procurement/pending-approvals'): void
+    {
+        self::email($recipients, fn (User $u) => new NotificationMail(
+            subjectLine: "Approval needed: {$docLabel} {$number}",
+            heading: "{$docLabel} {$number} needs your approval",
+            lines: array_values(array_filter([
+                $title ? "\u{201C}{$title}\u{201D}" : null,
+                "This {$docLabel} has reached your approval step. Please review and approve, request changes, or reject it.",
+            ])),
+            actionText: 'Review & approve',
+            actionUrl: self::appUrl($actionPath),
+            greetingName: self::firstName($u->name),
+            footnote: 'Sent because an approval is waiting on you in CASI 360.',
+        ));
+    }
+
+    /**
+     * A document reached a decision — email the requester/raiser the outcome.
+     */
+    public static function approvalDecision($recipients, string $docLabel, string $number, string $action, string $viewPath): void
+    {
+        $outcome = self::outcomeWord($action);
+
+        self::email($recipients, fn (User $u) => new NotificationMail(
+            subjectLine: "{$docLabel} {$number} was {$outcome}",
+            heading: "{$docLabel} {$number} was {$outcome}",
+            lines: ["Your {$docLabel} ({$number}) has been {$outcome}."],
+            actionText: 'View details',
+            actionUrl: self::appUrl($viewPath),
+            greetingName: self::firstName($u->name),
+            footnote: 'Update on a request you raised in CASI 360.',
+        ));
+    }
+
+    private static function outcomeWord(string $action): string
+    {
+        return match ($action) {
+            'approve', 'approved' => 'approved',
+            'reject', 'rejected'  => 'rejected',
+            'revision'            => 'sent back for revision',
+            'forward'             => 'forwarded',
+            default               => $action,
+        };
+    }
+
     /** A direct message was sent — notify the recipient. */
     public static function newDirectMessage(Message $message): void
     {

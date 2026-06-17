@@ -9,6 +9,7 @@ use App\Models\Forum;
 use App\Models\ForumMessage;
 use App\Models\Notice;
 use App\Models\Requisition;
+use App\Models\Rfp;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -182,6 +183,8 @@ class NotificationService
                 '/procurement/pending-approvals',
                 ['requisition_id' => $req->id, 'stage' => $stage]
             );
+
+            Notifier::approvalNeeded($recipients, 'Purchase Request', $req->requisition_number, $req->title, '/procurement/pending-approvals');
         });
     }
 
@@ -205,21 +208,45 @@ class NotificationService
                 '/procurement/purchase-requests',
                 ['requisition_id' => $req->id, 'action' => $action]
             );
+
+            Notifier::approvalDecision($recipients, 'Purchase Request', $req->requisition_number, $action, '/procurement/purchase-requests');
         });
     }
 
-    /** A BOQ was submitted — notify the Operations approvers. */
+    /** A BOQ was submitted — notify the Operations approvers (legacy single-stage). */
     public static function boqSubmitted(Boq $boq): void
     {
-        self::guard(function () use ($boq) {
+        self::boqPending($boq, 'operations');
+    }
+
+    /**
+     * A BOQ approval stage is now pending — notify whoever can act on it.
+     * Mirrors the PR chain (Budget Holder → Finance → Procurement → Operations).
+     */
+    public static function boqPending(Boq $boq, string $stage): void
+    {
+        self::guard(function () use ($boq, $stage) {
+            $recipients = match ($stage) {
+                'budget_holder' => array_filter([self::boqBudgetHolderUser($boq)]),
+                'finance'       => self::managersInDepartment('FINANCE')->all(),
+                'procurement'   => self::managersInDepartment('PROCUREMENT')->all(),
+                'operations'    => self::managersInDepartment('OPERATIONS')->all(),
+                default         => [],
+            };
+            if (!$recipients) {
+                return;
+            }
+
             self::push(
-                self::managersInDepartment('OPERATIONS')->all(),
+                $recipients,
                 'approval',
-                "BOQ {$boq->boq_number} is awaiting approval",
+                "BOQ {$boq->boq_number} needs your approval",
                 $boq->title ? Str::limit($boq->title, 120, '') : null,
                 '/procurement/pending-approvals',
-                ['boq_id' => $boq->id]
+                ['boq_id' => $boq->id, 'stage' => $stage]
             );
+
+            Notifier::approvalNeeded($recipients, 'BOQ', $boq->boq_number, $boq->title, '/procurement/pending-approvals');
         });
     }
 
@@ -244,6 +271,61 @@ class NotificationService
                 '/procurement/boq',
                 ['boq_id' => $boq->id, 'action' => $action]
             );
+
+            Notifier::approvalDecision([$creator], 'BOQ', $boq->boq_number, $action, '/procurement/boq');
+        });
+    }
+
+    /* ================================================================
+     * Payment Request (RFP) approval events — v2 §3.3
+     * ================================================================ */
+
+    /** An RFP approval stage is now pending — notify whoever can act on it. */
+    public static function rfpPending(Rfp $rfp, string $stage): void
+    {
+        self::guard(function () use ($rfp, $stage) {
+            $recipients = match ($stage) {
+                'programme_manager' => self::managersInDepartment('PROGRAMS')->all(),
+                'finance'           => self::managersInDepartment('FINANCE')->all(),
+                'final_approver'    => self::paymentFinalApprovers()->all(),
+                default             => [],
+            };
+            if (!$recipients) {
+                return;
+            }
+
+            self::push(
+                $recipients,
+                'approval',
+                "Payment Request {$rfp->rfp_number} needs your approval",
+                $rfp->payee ? Str::limit("Payee: {$rfp->payee}", 120, '') : null,
+                '/procurement/pending-approvals',
+                ['rfp_id' => $rfp->id, 'stage' => $stage]
+            );
+
+            Notifier::approvalNeeded($recipients, 'Payment Request', $rfp->rfp_number, $rfp->payee, '/procurement/pending-approvals');
+        });
+    }
+
+    /** An RFP reached a decision — notify whoever raised it. */
+    public static function rfpDecided(Rfp $rfp, string $action): void
+    {
+        self::guard(function () use ($rfp, $action) {
+            $raiser = $rfp->raised_by ? User::find($rfp->raised_by) : null;
+            if (!$raiser) {
+                return;
+            }
+
+            self::push(
+                [$raiser],
+                'rfp',
+                "Payment Request {$rfp->rfp_number} was " . self::verb($action),
+                $rfp->payee ? Str::limit("Payee: {$rfp->payee}", 120, '') : null,
+                '/procurement/rfp',
+                ['rfp_id' => $rfp->id, 'action' => $action]
+            );
+
+            Notifier::approvalDecision([$raiser], 'Payment Request', $rfp->rfp_number, $action, '/procurement/rfp');
         });
     }
 
@@ -292,6 +374,38 @@ class NotificationService
             }
         }
         return $holder->email ? User::where('email', $holder->email)->first() : null;
+    }
+
+    /** The user account of a BOQ's budget holder (matched by email), if any. */
+    private static function boqBudgetHolderUser(Boq $boq): ?User
+    {
+        $boq->loadMissing('budgetHolder');
+        $holder = $boq->budgetHolder;
+        if (!$holder) {
+            return null;
+        }
+        if ($holder->user_id) {
+            $u = User::find($holder->user_id);
+            if ($u) {
+                return $u;
+            }
+        }
+        return $holder->email ? User::where('email', $holder->email)->first() : null;
+    }
+
+    /**
+     * The designated Payment-Request final approver(s): Country Director by
+     * role (default) or Operations managers, per config('procurement.payment_final_approver').
+     */
+    private static function paymentFinalApprovers(): Collection
+    {
+        $role = config('procurement.payment_final_approver', 'country_director');
+
+        if ($role === 'operations') {
+            return self::managersInDepartment('OPERATIONS');
+        }
+
+        return User::where('role', 'country_director')->where('status', 'active')->get();
     }
 
     /** Distinct users for a notice's audiences (mirrors Notifier). */

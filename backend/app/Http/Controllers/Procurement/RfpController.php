@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Rfp;
 use App\Models\RfpItem;
+use App\Services\NotificationService;
 use App\Services\Procurement\DocumentChainResolver;
 use App\Services\Procurement\DocumentScopeService;
 use Illuminate\Http\JsonResponse;
@@ -170,6 +171,7 @@ class RfpController extends Controller
             // Open the payment approval chain unless this was saved as a draft.
             if ($rfp->status === 'pending_approval') {
                 $rfp->createApprovalChain();
+                NotificationService::rfpPending($rfp, 'programme_manager');
             }
 
             $rfp->load(['vendor', 'items', 'approvals']);
@@ -211,6 +213,7 @@ class RfpController extends Controller
         return DB::transaction(function () use ($rfp) {
             $rfp->update(['status' => 'pending_approval']);
             $rfp->createApprovalChain();
+            NotificationService::rfpPending($rfp, 'programme_manager');
             $rfp->load(['vendor', 'items', 'approvals']);
 
             AuditLog::record(auth()->id(), 'rfp_submitted', 'rfp', $rfp->id, null, $rfp->toApiArray());

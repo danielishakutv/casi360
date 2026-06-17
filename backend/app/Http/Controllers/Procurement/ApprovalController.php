@@ -256,6 +256,7 @@ class ApprovalController extends Controller
             $now        = now();
             $stageLabel = $activeApproval->stage_label;
             $fromStatus = $rfp->status;
+            $nextStage  = null;
 
             $actorData = [
                 'actor_id'       => $user->id,
@@ -272,6 +273,7 @@ class ApprovalController extends Controller
                     $next = $rfp->approvals->where('status', 'waiting')->sortBy('stage_order')->first();
                     if ($next) {
                         $next->update(['status' => 'pending', 'updated_at' => $now]);
+                        $nextStage = $next->stage;
                     } else {
                         $rfp->update(['status' => 'approved']);
                     }
@@ -286,6 +288,14 @@ class ApprovalController extends Controller
                     $activeApproval->update(array_merge($actorData, ['status' => 'revision']));
                     $rfp->update(['status' => 'revision']);
                     break;
+            }
+
+            // Notify: advancing pings the next approver; a final approve /
+            // reject / revision pings whoever raised the payment request.
+            if ($nextStage) {
+                NotificationService::rfpPending($rfp, $nextStage);
+            } else {
+                NotificationService::rfpDecided($rfp, $action);
             }
 
             $rfp->refresh();
