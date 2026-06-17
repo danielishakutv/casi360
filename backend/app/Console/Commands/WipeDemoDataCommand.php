@@ -81,6 +81,7 @@ class WipeDemoDataCommand extends Command
         'purchase_orders',
         'invoices',
         'rfp_items',
+        'rfp_approvals',        // Payment Request approval chain (v2 §3.3)
         'rfps',
         'rfq_items',
         'rfq_vendors',          // RFQ↔vendor pivot
@@ -88,6 +89,7 @@ class WipeDemoDataCommand extends Command
         'grn_items',
         'grns',
         'boq_audit_logs',
+        'boq_approvals',        // BOQ approval chain (ED §1)
         'boq_items',
         'boqs',
         'inventory_items',
@@ -103,6 +105,7 @@ class WipeDemoDataCommand extends Command
         'projects',
 
         // ── HR (employees rebuilt blank afterwards) ─────────────────
+        'attendances',          // staff sign in/out + monthly timesheets
         'notes',
         'employees',
         'holidays',
@@ -114,6 +117,7 @@ class WipeDemoDataCommand extends Command
         'notice_reads',
         'notice_audiences',
         'notices',
+        'notifications',        // unified in-app notification bell
         'emails',
         'sms_messages',
 
