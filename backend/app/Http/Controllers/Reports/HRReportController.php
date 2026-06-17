@@ -32,7 +32,7 @@ class HRReportController extends Controller
             'date_to'        => 'nullable|date|after_or_equal:date_from',
         ]);
 
-        $query = Employee::with(['department:id,name', 'designation:id,name']);
+        $query = Employee::with(['department:id,name', 'designation:id,title']);
 
         if ($request->filled('department_id'))  $query->where('department_id', $request->department_id);
         if ($request->filled('designation_id')) $query->where('designation_id', $request->designation_id);
@@ -50,7 +50,7 @@ class HRReportController extends Controller
                 'email'       => $e->email,
                 'phone'       => $e->phone,
                 'department'  => $e->department?->name ?? '—',
-                'designation' => $e->designation?->name ?? '—',
+                'designation' => $e->designation?->title ?? '—',
                 'gender'      => ucfirst($e->gender ?? '—'),
                 'join_date'   => $e->join_date?->format('Y-m-d') ?? '—',
                 'status'      => ucfirst($e->status),
@@ -76,7 +76,7 @@ class HRReportController extends Controller
                 'email'       => $e->email,
                 'phone'       => $e->phone,
                 'department'  => $e->department?->name ?? '—',
-                'designation' => $e->designation?->name ?? '—',
+                'designation' => $e->designation?->title ?? '—',
                 'gender'      => ucfirst($e->gender ?? '—'),
                 'join_date'   => $e->join_date?->format('Y-m-d') ?? '—',
                 'status'      => ucfirst($e->status),
@@ -164,7 +164,7 @@ class HRReportController extends Controller
         $query->orderBy('name');
 
         $mapRow = fn (Designation $d) => [
-            'name'           => $d->name,
+            'name'           => $d->title,
             'department'     => $d->department?->name ?? '—',
             'level'          => ucfirst($d->level ?? '—'),
             'employee_count' => $d->employees_count,

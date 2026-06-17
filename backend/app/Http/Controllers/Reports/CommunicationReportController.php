@@ -108,7 +108,9 @@ class CommunicationReportController extends Controller
             'status'          => ucfirst($f->status),
             'total_messages'  => $f->messages_count,
             'active_users'    => $activeUsers[$f->id] ?? 0,
-            'last_activity'   => $f->messages()->latest()->value('created_at')?->format('Y-m-d H:i') ?? '—',
+            // value() returns the raw string (no model cast), so format() on it
+            // would fatal — use first() to get a model with a Carbon created_at.
+            'last_activity'   => $f->messages()->latest()->first()?->created_at?->format('Y-m-d H:i') ?? '—',
         ];
 
         if ($request->filled('format')) {
