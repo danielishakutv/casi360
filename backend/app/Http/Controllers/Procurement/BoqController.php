@@ -93,6 +93,8 @@ class BoqController extends Controller
 
             $data['boq_number'] = Boq::generateBoqNumber();
             $data['status'] = $data['status'] ?? 'draft';
+            // Record the raiser for segregation of duties (v2 §4).
+            $data['created_by'] = auth()->id();
 
             $boq = Boq::create($data);
 
@@ -263,35 +265,53 @@ class BoqController extends Controller
     {
         $boq = Boq::findOrFail($id);
 
-        if (!in_array($boq->status, ['draft', 'revised'], true)) {
-            return $this->error('Only BOQs in draft or revised status can be submitted.', 422);
+        if (!in_array($boq->status, ['draft', 'revised', 'rejected'], true)) {
+            return $this->error('Only BOQs in draft, revised, or rejected status can be submitted.', 422);
+        }
+
+        // Stage 1 of the chain routes to the budget holder — block submission
+        // until one is set so the chain is never created with a dead stage.
+        if (empty($boq->budget_holder_id)) {
+            return $this->error('Cannot submit: a budget holder must be set before this BOQ can enter the approval chain.', 422);
         }
 
         return DB::transaction(function () use ($boq) {
             $fromStatus = $boq->status;
-            $boq->update(['status' => 'submitted']);
 
-            // Notify the Operations approvers that a BOQ is awaiting approval.
+            // Originator-skip (v2 §3.4): if the preparer is the budget holder,
+            // auto-skip the Budget Holder stage so the chain opens at Finance.
+            $skipBudgetHolder = config('procurement.originator_skip', true)
+                && $this->authorizer->boqBudgetHolderIsOriginator($boq);
+
+            $boq->update(['status' => 'pending_approval']);
+            $boq->createApprovalChain($skipBudgetHolder);
+
+            // Notify whoever now owns the first open stage.
             NotificationService::boqSubmitted($boq);
 
             $actor = auth()->user();
-            BoqAuditLog::write(
-                $boq->id,
-                $actor?->id,
-                $actor?->name ?? 'System',
-                'submitted'
-            );
+            BoqAuditLog::write($boq->id, $actor?->id, $actor?->name ?? 'System', 'submitted');
             AuditLog::record(
                 $actor?->id,
                 'boq_submitted',
                 'boq',
                 $boq->id,
                 ['status' => $fromStatus],
-                ['status' => 'submitted']
+                ['status' => 'pending_approval']
             );
 
+            if ($skipBudgetHolder) {
+                BoqAuditLog::write(
+                    $boq->id,
+                    $actor?->id,
+                    'System (originator auto-skip)',
+                    'budget_holder_auto_skip',
+                    'Budget Holder stage auto-skipped: preparer is the budget holder (segregation of duties).'
+                );
+            }
+
             $boq->refresh();
-            $boq->load('items');
+            $boq->load(['items', 'approvals']);
 
             return $this->success([
                 'boq' => $boq->toDetailArray(),
@@ -312,92 +332,107 @@ class BoqController extends Controller
      */
     public function approval(ProcessBoqApprovalRequest $request, string $id): JsonResponse
     {
-        $boq = Boq::findOrFail($id);
+        $boq = Boq::with('approvals')->findOrFail($id);
 
-        // Operations is the final approver on BOQs. The route guard only checks
-        // the boq.approve entitlement (held by all managers); narrow the actual
-        // right to act to admins and Operations-department managers/leads.
-        if (!$this->authorizer->isOperationsApprover($request->user())) {
-            return $this->error('Only an Operations department manager (or an administrator) can approve a BOQ.', 403);
+        if (!in_array($boq->status, ['pending_approval', 'submitted'], true)) {
+            return $this->error('Only BOQs awaiting approval can be approved, revised, or rejected.', 422);
         }
 
-        if ($boq->status !== 'submitted') {
-            return $this->error('Only submitted BOQs can be approved, revised, or rejected.', 422);
-        }
-
+        $user      = $request->user();
         $validated = $request->validated();
         $action    = $validated['action'];
         $comments  = $validated['comments'] ?? null;
 
-        $nextStatus = match ($action) {
-            'approve'  => 'approved',
-            'revision' => 'revised',
-            'reject'   => 'rejected',
-        };
+        $activeApproval = $boq->approvals->where('status', 'pending')->sortBy('stage_order')->first();
+        if (!$activeApproval) {
+            return $this->error('This approval stage is not currently awaiting action.', 422);
+        }
 
-        // Normalise verb → past-tense audit action so the timeline reads
-        // "approved / revision / rejected" (matches the spec exactly).
-        $auditAction = match ($action) {
-            'approve'  => 'approved',
-            'revision' => 'revision',
-            'reject'   => 'rejected',
-        };
+        // Stage ownership (Budget Holder / dept-manager rules).
+        $auth = $this->authorizer->canActOnBoqStage($user, $boq, $activeApproval->stage);
+        if (!$auth['allowed']) {
+            return $this->error($auth['reason'] ?? 'You are not authorised to approve at the current stage.', 403);
+        }
 
-        return DB::transaction(function () use ($boq, $action, $auditAction, $comments, $nextStatus) {
+        // Segregation of duties (v2 §4): the raiser can't approve, and no one
+        // may act on more than one stage of the same BOQ.
+        $sod = $this->authorizer->passesSegregation(
+            $user,
+            [$boq->created_by],
+            $boq->approvals->pluck('actor_id')->all()
+        );
+        if (!$sod['allowed']) {
+            return $this->error($sod['reason'], 403);
+        }
+
+        return DB::transaction(function () use ($boq, $activeApproval, $action, $comments, $user) {
+            $now        = now();
             $fromStatus = $boq->status;
-            $actor = auth()->user();
+            $stageLabel = $activeApproval->stage_label;
 
-            $updates = ['status' => $nextStatus];
+            $actorData = [
+                'actor_id'       => $user->id,
+                'actor_name'     => $user->name,
+                'actor_position' => $user->department ?? null,
+                'comments'       => $comments,
+                'decided_at'     => $now,
+            ];
 
-            // When the BOQ is approved, capture the approver as the
-            // "budget holder" sign-off so the preview modal and PDF/CSV
-            // exports include their name, role, email and the date —
-            // matching the PREPARED BY / MARKET SURVEY blocks already
-            // captured at creation time.
-            if ($action === 'approve' && $actor) {
-                $existing = is_array($boq->signoffs) ? $boq->signoffs : [];
-                $filtered = array_values(array_filter(
-                    $existing,
-                    fn ($s) => ($s['type'] ?? null) !== 'budget_holder'
-                ));
-                $filtered[] = [
-                    'type'     => 'budget_holder',
-                    'name'     => $actor->name,
-                    'position' => $actor->role
-                        ? ucwords(str_replace('_', ' ', $actor->role))
-                        : null,
-                    'email'    => $actor->email,
-                    'date'     => now()->toDateString(),
-                ];
-                $updates['signoffs'] = $filtered;
+            switch ($action) {
+                case 'approve':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'approved']));
+
+                    // Mirror the approval into the signoffs array (keyed by stage)
+                    // so the BOQ preview/PDF sign-off blocks stay populated.
+                    $signoffs = is_array($boq->signoffs) ? $boq->signoffs : [];
+                    $signoffs = array_values(array_filter($signoffs, fn ($s) => ($s['type'] ?? null) !== $activeApproval->stage));
+                    $signoffs[] = [
+                        'type'     => $activeApproval->stage,
+                        'name'     => $user->name,
+                        'position' => $user->department ?: ($user->role ? ucwords(str_replace('_', ' ', $user->role)) : null),
+                        'email'    => $user->email,
+                        'date'     => $now->toDateString(),
+                    ];
+                    $boqUpdates = ['signoffs' => $signoffs];
+
+                    $next = $boq->approvals->where('status', 'waiting')->sortBy('stage_order')->first();
+                    if ($next) {
+                        $next->update(['status' => 'pending', 'updated_at' => $now]);
+                    } else {
+                        $boqUpdates['status'] = 'approved';
+                    }
+                    $boq->update($boqUpdates);
+                    break;
+
+                case 'revision':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'revision']));
+                    $boq->update(['status' => 'revised']);
+                    break;
+
+                case 'reject':
+                    $activeApproval->update(array_merge($actorData, ['status' => 'rejected']));
+                    $boq->update(['status' => 'rejected']);
+                    break;
             }
 
-            $boq->update($updates);
-
-            // Notify whoever created the BOQ of the decision.
             NotificationService::boqDecided($boq, $action);
 
-            BoqAuditLog::write(
-                $boq->id,
-                $actor?->id,
-                $actor?->name ?? 'System',
-                $auditAction,
-                $comments
-            );
+            $auditAction = $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'revision');
+            BoqAuditLog::write($boq->id, $user->id, $user->name, $auditAction, $comments);
             AuditLog::record(
-                $actor?->id,
+                $user->id,
                 "boq_{$action}",
                 'boq',
                 $boq->id,
                 ['status' => $fromStatus],
-                ['status' => $nextStatus, 'comments' => $comments]
+                ['status' => $boq->status, 'stage' => $activeApproval->stage, 'comments' => $comments]
             );
 
             $boq->refresh();
-            $boq->load('items');
+            $boq->load(['items', 'approvals']);
 
             $message = match ($action) {
-                'approve'  => 'BOQ approved successfully.',
+                'approve'  => "BOQ approved by {$stageLabel}",
                 'revision' => 'BOQ sent back for revision.',
                 'reject'   => 'BOQ rejected.',
             };

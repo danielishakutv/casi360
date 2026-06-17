@@ -641,15 +641,37 @@ class ApprovalController extends Controller
      */
     private function getPendingBoqs($user, string $scope): \Illuminate\Support\Collection
     {
-        // BOQs are approved by Operations (admins included). Only show the
-        // pending BOQ queue to users who can actually act on it.
-        if ($scope !== 'all' && !$this->authorizer->isOperationsApprover($user)) {
+        // BOQs now follow the same 4-stage chain as PRs (ED process §1).
+        $query = Boq::with('approvals')->where('status', 'pending_approval');
+
+        if ($scope === 'all') {
+            return $query->orderByDesc('updated_at')->get()->map(fn (Boq $boq) => $this->toPendingBoqArray($boq));
+        }
+
+        $eligibleStages = $this->authorizer->eligibleStagesFor($user);
+        if (empty($eligibleStages)) {
             return collect();
         }
 
-        return Boq::where('status', 'submitted')
-            ->orderByDesc('updated_at')
-            ->get()
+        $query->whereHas('approvals', function ($q) use ($eligibleStages) {
+            $q->where('status', 'pending')->whereIn('stage', $eligibleStages);
+        });
+
+        return $query->orderByDesc('updated_at')->get()
+            ->filter(function ($boq) use ($user) {
+                $active = $boq->approvals->firstWhere('status', 'pending');
+                if (!$active) {
+                    return false;
+                }
+                if (!$this->authorizer->canActOnBoqStage($user, $boq, $active->stage)['allowed']) {
+                    return false;
+                }
+                return $this->authorizer->passesSegregation(
+                    $user,
+                    [$boq->created_by],
+                    $boq->approvals->pluck('actor_id')->all()
+                )['allowed'];
+            })
             ->map(fn (Boq $boq) => $this->toPendingBoqArray($boq))
             ->values();
     }
@@ -670,6 +692,9 @@ class ApprovalController extends Controller
             'grand_total'       => (float) $boq->items()->sum('total'),
             'item_count'        => $boq->items()->count(),
             'submitted_at'      => $boq->updated_at?->toISOString(),
+            'active_stage'      => $boq->active_stage,
+            'approval_progress' => $boq->approval_progress,
+            'approval_chain'    => $boq->approvals->map->toApiArray(false)->toArray(),
         ];
     }
 

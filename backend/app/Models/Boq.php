@@ -22,6 +22,8 @@ class Boq extends Model
         'exchange_rate',
         'delivery_location',
         'prepared_by',
+        'budget_holder_id',
+        'created_by',
         'status',
         'date',
         'notes',
@@ -41,6 +43,87 @@ class Boq extends Model
     public function items()
     {
         return $this->hasMany(BoqItem::class);
+    }
+
+    public function budgetHolder()
+    {
+        return $this->belongsTo(Employee::class, 'budget_holder_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Approval chain (budget_holder → finance → procurement → operations). */
+    public function approvals()
+    {
+        return $this->hasMany(BoqApproval::class)->orderBy('stage_order');
+    }
+
+    /* ----------------------------------------------------------------
+     * Approval chain — accessors & creation (ED process §1)
+     * ---------------------------------------------------------------- */
+
+    public function getActiveStageAttribute(): ?string
+    {
+        if ($this->relationLoaded('approvals')) {
+            return $this->approvals->firstWhere('status', 'pending')?->stage;
+        }
+
+        return $this->approvals()->where('status', 'pending')->value('stage');
+    }
+
+    public function getApprovalProgressAttribute(): array
+    {
+        $approvals = $this->relationLoaded('approvals') ? $this->approvals : $this->approvals()->get();
+
+        if ($approvals->isEmpty()) {
+            return ['completed' => 0, 'total' => 0];
+        }
+
+        return [
+            'completed' => $approvals->whereIn('status', ['approved', 'skipped'])->count(),
+            'total'     => $approvals->count(),
+        ];
+    }
+
+    /**
+     * Create (or reset) the fixed 4-stage approval chain:
+     * Budget Holder → Finance → Procurement → Operations (final).
+     *
+     * When $skipBudgetHolder is true (originator-skip — the preparer IS the
+     * budget holder), the Budget Holder stage is recorded as 'skipped' and the
+     * chain opens at Finance instead.
+     */
+    public function createApprovalChain(bool $skipBudgetHolder = false): void
+    {
+        $this->approvals()->delete();
+
+        $budgetHolderRow = [
+            'stage'       => 'budget_holder',
+            'stage_order' => 1,
+            'stage_label' => 'Budget Holder',
+            'status'      => 'pending',
+        ];
+
+        $financeStatus = 'waiting';
+
+        if ($skipBudgetHolder) {
+            $budgetHolderRow['status']         = 'skipped';
+            $budgetHolderRow['actor_name']     = 'System (originator auto-skip)';
+            $budgetHolderRow['actor_position'] = 'Automated';
+            $budgetHolderRow['comments']       = 'Auto-skipped: the budget holder raised this BOQ (segregation of duties).';
+            $budgetHolderRow['decided_at']     = now();
+            $financeStatus = 'pending';
+        }
+
+        $this->approvals()->createMany([
+            $budgetHolderRow,
+            ['stage' => 'finance',     'stage_order' => 2, 'stage_label' => 'Finance',     'status' => $financeStatus],
+            ['stage' => 'procurement', 'stage_order' => 3, 'stage_label' => 'Procurement', 'status' => 'waiting'],
+            ['stage' => 'operations',  'stage_order' => 4, 'stage_label' => 'Operations',  'status' => 'waiting'],
+        ]);
     }
 
     /* ----------------------------------------------------------------
@@ -94,7 +177,13 @@ class Boq extends Model
             'currency' => $this->currency ?? 'USD',
             'exchange_rate' => $this->exchange_rate ? (float) $this->exchange_rate : null,
             'prepared_by' => $this->prepared_by,
+            'budget_holder_id' => $this->budget_holder_id,
+            'budget_holder_name' => $this->budgetHolder?->name,
+            'created_by' => $this->created_by,
             'status' => $this->status,
+            'active_stage' => $this->active_stage,
+            'approval_progress' => $this->approval_progress,
+            'approval_chain' => $this->approvals->map->toApiArray(false)->toArray(),
             'date' => $this->date?->toDateString(),
             'notes' => $this->notes,
             'signoffs' => $this->signoffs,
@@ -114,7 +203,8 @@ class Boq extends Model
     public function toDetailArray(): array
     {
         return array_merge($this->toApiArray(), [
-            'items' => $this->items->map->toApiArray()->toArray(),
+            'items'          => $this->items->map->toApiArray()->toArray(),
+            'approval_chain' => $this->approvals->map->toApiArray(true)->toArray(),
         ]);
     }
 }

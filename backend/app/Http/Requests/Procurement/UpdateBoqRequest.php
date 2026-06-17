@@ -18,6 +18,7 @@ class UpdateBoqRequest extends FormRequest
             'pr_reference' => ['nullable', 'string', 'max:255'],
             'project_code' => ['nullable', 'string', 'max:255'],
             'prepared_by' => ['nullable', 'string', 'max:255'],
+            'budget_holder_id' => ['nullable', 'uuid', 'exists:employees,id'],
             'status' => ['nullable', 'in:draft,submitted,approved,revised'],
             'date' => ['nullable', 'date'],
             'department' => ['nullable', 'string', 'max:255'],

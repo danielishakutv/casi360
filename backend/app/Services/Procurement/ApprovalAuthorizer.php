@@ -2,6 +2,7 @@
 
 namespace App\Services\Procurement;
 
+use App\Models\Boq;
 use App\Models\Department;
 use App\Models\Requisition;
 use App\Models\User;
@@ -103,6 +104,70 @@ class ApprovalAuthorizer
         }
 
         return $this->isManagerInDepartment($user, self::PROCUREMENT_CODE);
+    }
+
+    /* ----------------------------------------------------------------
+     * BOQ approval — ED process §1 (same 4-stage chain as PR)
+     * Budget Holder → Finance → Procurement → Operations.
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Can $user act on $stage of this BOQ right now? Finance / Procurement /
+     * Operations reuse the same department-manager rules as the PR chain; the
+     * Budget Holder stage matches the BOQ's assigned budget holder by email.
+     *
+     * @return array{allowed:bool,reason:?string}
+     */
+    public function canActOnBoqStage(User $user, Boq $boq, string $stage): array
+    {
+        if ($this->isAdmin($user)) {
+            return ['allowed' => true, 'reason' => null];
+        }
+
+        return match ($stage) {
+            'budget_holder' => $this->canActAsBoqBudgetHolder($user, $boq),
+            'finance'       => $this->canActAsFinance($user),
+            'procurement'   => $this->canActAsProcurement($user),
+            'operations'    => $this->canActAsOperations($user),
+            default         => ['allowed' => false, 'reason' => "Unknown approval stage: {$stage}."],
+        };
+    }
+
+    /**
+     * True when the BOQ's assigned budget holder is the same person who created
+     * it (matched by email) — drives the originator-skip on the BOQ chain.
+     */
+    public function boqBudgetHolderIsOriginator(Boq $boq): bool
+    {
+        if (!$boq->budget_holder_id) {
+            return false;
+        }
+
+        $boq->loadMissing(['budgetHolder', 'creator']);
+        $holderEmail  = $boq->budgetHolder?->email;
+        $creatorEmail = $boq->creator?->email;
+
+        return $holderEmail && $creatorEmail && strcasecmp($holderEmail, $creatorEmail) === 0;
+    }
+
+    private function canActAsBoqBudgetHolder(User $user, Boq $boq): array
+    {
+        if (!$boq->budget_holder_id) {
+            return ['allowed' => false, 'reason' => 'This BOQ has no budget holder set — only an administrator can approve as Budget Holder.'];
+        }
+
+        $boq->loadMissing('budgetHolder');
+        $holder = $boq->budgetHolder;
+
+        if (!$holder) {
+            return ['allowed' => false, 'reason' => 'The selected budget holder no longer exists — please ask an administrator to reassign.'];
+        }
+
+        if ($holder->email && strcasecmp($holder->email, $user->email) === 0) {
+            return ['allowed' => true, 'reason' => null];
+        }
+
+        return ['allowed' => false, 'reason' => 'Only the assigned budget holder (or an administrator) can approve at the Budget Holder stage.'];
     }
 
     /**
