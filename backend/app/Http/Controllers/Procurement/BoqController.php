@@ -30,7 +30,7 @@ class BoqController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Boq::query();
+        $query = Boq::with(['approvals', 'budgetHolder']);
 
         if ($this->scopeService->shouldScope($request->user(), 'procurement.boq.view_all', $request)) {
             $this->scopeService->applyToBoqs($query, $request->user());
@@ -138,7 +138,7 @@ class BoqController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $boq = Boq::with('items')->findOrFail($id);
+        $boq = Boq::with(['items', 'approvals', 'budgetHolder'])->findOrFail($id);
 
         $auditLog = BoqAuditLog::where('boq_id', $id)
             ->orderBy('created_at', 'asc')
