@@ -27,6 +27,7 @@ class User extends Authenticatable
         'email_verified_at',
         'last_login_at',
         'last_login_ip',
+        'last_message_email_at',
         'password_changed_at',
         'force_password_change',
         'email_notifications',
@@ -62,6 +63,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'last_message_email_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'force_password_change' => 'boolean',
             'email_notifications' => 'boolean',

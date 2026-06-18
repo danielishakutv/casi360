@@ -10,6 +10,7 @@ use App\Models\Notice;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -150,7 +151,12 @@ class Notifier
         };
     }
 
-    /** A direct message was sent — notify the recipient. */
+    /**
+     * A direct message was sent — email the recipient, but ONLY when they are
+     * away and we haven't emailed them recently (see config/notifications.php).
+     * In-app notification + the Messages badge are unaffected; this just stops
+     * inbox spam during an active chat.
+     */
     public static function newDirectMessage(Message $message): void
     {
         $recipient = $message->recipient;
@@ -158,6 +164,14 @@ class Notifier
         if (!$recipient || !$sender) {
             return;
         }
+
+        if (!self::shouldEmailDirectMessage($recipient)) {
+            return;
+        }
+
+        // Stamp the throttle window now (before the deferred send) so a rapid
+        // burst of messages results in a single email, not one per message.
+        DB::table('users')->where('id', $recipient->id)->update(['last_message_email_at' => now()]);
 
         self::email($recipient, fn (User $u) => new NotificationMail(
             subjectLine: "New message from {$sender->name}",
@@ -171,6 +185,49 @@ class Notifier
             greetingName: self::firstName($u->name),
             footnote: "Sent because {$sender->name} messaged you on CASI 360.",
         ));
+    }
+
+    /**
+     * Should a direct-message email go to this recipient right now? Both gates
+     * must pass:
+     *   1. Throttle — no message email in the last N minutes (config).
+     *   2. Presence — they are NOT actively using the dashboard (or logged out).
+     */
+    private static function shouldEmailDirectMessage(User $recipient): bool
+    {
+        $throttleMinutes = (int) config('notifications.message_email_throttle_minutes', 30);
+        $last = $recipient->last_message_email_at;
+        if ($last && $last->diffInMinutes(now()) < $throttleMinutes) {
+            return false; // emailed too recently
+        }
+
+        if ((bool) config('notifications.message_email_presence_aware', true)
+            && self::recipientIsActive($recipient)) {
+            return false; // actively using the app → in-app notification is enough
+        }
+
+        return true;
+    }
+
+    /**
+     * Is the user actively using the app? True when a database session of
+     * theirs had request activity within the configured window. The SPA polls
+     * every few seconds while open, so a fresh value means they're looking
+     * right now; a stale value (or no session) means away / logged out.
+     */
+    private static function recipientIsActive(User $user): bool
+    {
+        $window = (int) config('notifications.active_window_seconds', 180);
+
+        $lastActivity = DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->max('last_activity'); // Unix timestamp (int) or null
+
+        if (!$lastActivity) {
+            return false;
+        }
+
+        return (now()->timestamp - (int) $lastActivity) <= $window;
     }
 
     /**
