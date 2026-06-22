@@ -27,9 +27,20 @@ class MessageController extends Controller
         $query = Message::rootMessages()->with(['sender', 'recipient']);
 
         if ($box === 'sent') {
-            $query->sent($userId);
+            // Threads the user started OR has replied to — so a conversation
+            // shows under Sent once they've contributed any message to it.
+            $query->where(function ($q) use ($userId) {
+                $q->where(fn ($r) => $r->where('sender_id', $userId)->whereNull('sender_deleted_at'))
+                  ->orWhereHas('replies', fn ($r) => $r->where('sender_id', $userId)->whereNull('sender_deleted_at'));
+            });
         } else {
-            $query->inbox($userId);
+            // Threads where the user received the original OR any reply — so a
+            // conversation they started still surfaces in their Inbox once
+            // someone replies to it (accessible from both Inbox and Sent).
+            $query->where(function ($q) use ($userId) {
+                $q->where(fn ($r) => $r->where('recipient_id', $userId)->whereNull('recipient_deleted_at'))
+                  ->orWhereHas('replies', fn ($r) => $r->where('recipient_id', $userId)->whereNull('recipient_deleted_at'));
+            });
         }
 
         if ($request->filled('search')) {
@@ -45,8 +56,13 @@ class MessageController extends Controller
             $query->whereNull('read_at');
         }
 
+        // Surface threads by latest activity (newest reply, else the root's
+        // own time) so a conversation jumps up the list when it gets a reply.
         $perPage = min((int) $request->input('per_page', 25), 100);
-        $paginated = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        $paginated = $query
+            ->withMax('replies', 'created_at')
+            ->orderByRaw('COALESCE(replies_max_created_at, created_at) DESC')
+            ->paginate($perPage);
 
         // Add reply info to each thread
         $threads = collect($paginated->items())->map(function (Message $msg) use ($userId) {
@@ -59,7 +75,9 @@ class MessageController extends Controller
             return $data;
         });
 
-        $unreadCount = Message::inbox($userId)->rootMessages()->whereNull('read_at')->count();
+        // Count all unread messages addressed to the user (root + replies) so
+        // a new reply in a thread they started still bumps the unread badge.
+        $unreadCount = Message::inbox($userId)->whereNull('read_at')->count();
 
         return $this->success([
             'threads' => $threads,
