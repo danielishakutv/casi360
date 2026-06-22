@@ -112,7 +112,10 @@ class Employee extends Model
             'email' => $this->email,
             'phone' => $this->phone,
             'department_id' => $this->department_id,
-            'department' => $this->department?->name,
+            // Fall back to the linked user's department when this employee row
+            // has no department of its own (e.g. rows auto-created from a user
+            // account, where department_id is left null for HR to fill in).
+            'department' => $this->department?->name ?? $this->user?->department,
             'designation_id' => $this->designation_id,
             'position' => $this->designation?->title,
             'manager' => $this->manager,

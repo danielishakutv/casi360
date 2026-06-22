@@ -32,7 +32,7 @@ class HRReportController extends Controller
             'date_to'        => 'nullable|date|after_or_equal:date_from',
         ]);
 
-        $query = Employee::with(['department:id,name', 'designation:id,title']);
+        $query = Employee::with(['department:id,name', 'designation:id,title', 'user:id,department']);
 
         if ($request->filled('department_id'))  $query->where('department_id', $request->department_id);
         if ($request->filled('designation_id')) $query->where('designation_id', $request->designation_id);

@@ -26,7 +26,7 @@ class TimesheetController extends Controller
     {
         [$start, $end, $month] = $this->monthRange($request->input('month'));
 
-        $employees = Employee::with('department')
+        $employees = Employee::with(['department', 'user:id,department'])
             ->where('status', 'active')
             ->orderBy('name')
             ->get();

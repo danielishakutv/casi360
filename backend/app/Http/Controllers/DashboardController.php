@@ -72,7 +72,7 @@ class DashboardController extends Controller
                 'total_budget'    => (float) Project::sum('total_budget'),
                 'notices'         => Notice::published()->count(),
             ],
-            'recent_staff'    => Employee::with('department')
+            'recent_staff'    => Employee::with(['department', 'user:id,department'])
                 ->orderByDesc('created_at')->take(5)->get()->map->toApiArray()->values(),
             'recent_notices'  => Notice::published()
                 ->orderByDesc('created_at')->take(5)->get()->map->toApiArray()->values(),

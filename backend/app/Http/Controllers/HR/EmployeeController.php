@@ -20,7 +20,7 @@ class EmployeeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Employee::with(['department', 'designation']);
+        $query = Employee::with(['department', 'designation', 'user:id,department']);
 
         // Filters
         if ($request->filled('status')) {

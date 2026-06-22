@@ -30,7 +30,7 @@ class DataManagementController extends Controller
                 ->toArray();
         }
         if (in_array('employees', $entities)) {
-            $exportData['employees'] = Employee::with('department:id,name')
+            $exportData['employees'] = Employee::with(['department:id,name', 'user:id,department'])
                 ->get()
                 ->map(function ($e) {
                     return $e->toApiArray();
