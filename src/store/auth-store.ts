@@ -314,6 +314,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "casi360-auth",
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        forcePasswordChange: state.forcePasswordChange,
+      }),
     }
   )
 );

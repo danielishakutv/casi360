@@ -24,6 +24,11 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, isLoading, isAuthenticated } = useAuthStore();
   const [showPassword, setShowPassword] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const {
     register,
@@ -38,10 +43,10 @@ export default function LoginPage() {
   });
 
   React.useEffect(() => {
-    if (isAuthenticated) {
+    if (mounted && isAuthenticated) {
       router.push("/dashboard/");
     }
-  }, [isAuthenticated, router]);
+  }, [mounted, isAuthenticated, router]);
 
   const onSubmit = async (data: LoginForm) => {
     const result = await login(data.email, data.password);

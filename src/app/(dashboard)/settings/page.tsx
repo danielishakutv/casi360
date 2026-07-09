@@ -8,7 +8,6 @@ import {
   Monitor,
   Shield,
   Users,
-  ToggleLeft,
   Database,
   RefreshCcw,
   Trash2,
@@ -22,8 +21,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -50,15 +47,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useModuleStore } from "@/store/module-store";
 import { useAuthStore } from "@/store/auth-store";
-import { moduleRegistry } from "@/lib/module-registry";
 import { User, UserRole } from "@/types";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { enabledModules, toggleModule } = useModuleStore();
   const { user, switchRole, fetchUsers, updateUserRole, updateUserStatus, deleteUser } = useAuthStore();
   const [mounted, setMounted] = React.useState(false);
   const [users, setUsers] = React.useState<User[]>([]);
@@ -143,9 +137,8 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="appearance" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="modules">Modules</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
@@ -202,58 +195,6 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Modules Tab */}
-        <TabsContent value="modules" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ToggleLeft className="h-5 w-5" />
-                Feature Toggles
-              </CardTitle>
-              <CardDescription>
-                Enable or disable system modules
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {moduleRegistry.map((mod) => (
-                  <div
-                    key={mod.id}
-                    className="flex items-center justify-between rounded-lg border p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{mod.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mod.description}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={enabledModules[mod.id] !== false}
-                      onCheckedChange={() => {
-                        if (mod.id === "dashboard") {
-                          toast.error("Cannot disable dashboard");
-                          return;
-                        }
-                        toggleModule(mod.id);
-                        toast.success(
-                          `${mod.name} ${
-                            enabledModules[mod.id] !== false
-                              ? "disabled"
-                              : "enabled"
-                          }`
-                        );
-                      }}
-                      disabled={mod.id === "dashboard"}
-                    />
-                  </div>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

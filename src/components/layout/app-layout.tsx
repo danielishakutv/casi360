@@ -16,30 +16,46 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const sessionChecked = React.useRef(false);
 
+  // Simple client-mount flag. Once useEffect fires we know:
+  // 1) We are on the client (not static HTML)
+  // 2) Zustand has already rehydrated from localStorage
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   React.useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Check session once on mount — fire-and-forget so it never blocks rendering.
-  // The persisted zustand state keeps the user logged in while the check runs
-  // in the background; if the server says "not authenticated" zustand will update
-  // and the redirect effect below will kick in.
+  // Check session once after mount — runs in background.
   React.useEffect(() => {
-    if (!sessionChecked.current) {
+    if (mounted && !sessionChecked.current) {
       sessionChecked.current = true;
-      // intentionally not awaited — runs in background
       checkSession();
     }
-  }, [checkSession]);
+  }, [mounted, checkSession]);
 
   React.useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+    if (mounted && !isLoading && !isAuthenticated && pathname !== "/login") {
       router.push("/login/");
     }
-  }, [isAuthenticated, isLoading, pathname, router]);
+  }, [mounted, isAuthenticated, isLoading, pathname, router]);
 
-  // Trust the persisted auth state — don't blank the screen while checkSession
-  // is in-flight; only redirect if we're definitely unauthenticated.
+  // Before client mount, show a brief loading state.
+  // This prevents the default isAuthenticated=false from triggering
+  // a redirect to /login before localStorage has been read.
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return null;
   }

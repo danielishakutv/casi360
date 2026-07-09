@@ -47,10 +47,14 @@ class ApiClient {
   async initCsrf(): Promise<void> {
     if (this.csrfInitialized) return;
 
-    await fetch(`${SANCTUM_CSRF_URL}/sanctum/csrf-cookie`, {
+    const res = await fetch(`${SANCTUM_CSRF_URL}/sanctum/csrf-cookie`, {
       method: "GET",
       credentials: "include",
     });
+
+    if (!res.ok) {
+      throw new Error(`CSRF cookie request failed (${res.status})`);
+    }
 
     this.csrfInitialized = true;
   }
@@ -73,20 +77,29 @@ class ApiClient {
     body?: unknown,
     options?: RequestOptions
   ): Promise<ApiResponse<T>> {
+    const isMutating = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
+
     // Ensure CSRF for mutating requests
-    if (["POST", "PATCH", "PUT", "DELETE"].includes(method)) {
+    if (isMutating) {
       await this.initCsrf();
     }
 
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       Accept: "application/json",
       ...options?.headers,
     };
 
-    const xsrfToken = this.getXsrfToken();
-    if (xsrfToken) {
-      headers["X-XSRF-TOKEN"] = xsrfToken;
+    // Only set Content-Type when sending a body (avoids unnecessary CORS preflight on GET)
+    if (body) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    // Only attach XSRF token for mutating requests (GET doesn't need CSRF protection)
+    if (isMutating) {
+      const xsrfToken = this.getXsrfToken();
+      if (xsrfToken) {
+        headers["X-XSRF-TOKEN"] = xsrfToken;
+      }
     }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -111,9 +124,9 @@ class ApiClient {
 
     const data: ApiResponse<T> = await response.json();
 
-    // Handle 401 - redirect to login
-    if (response.status === 401) {
-      // Reset CSRF so it re-fetches on next request
+    // Handle 401 (unauthenticated) or 419 (CSRF token mismatch)
+    // Reset CSRF so it re-fetches on the next mutating request
+    if (response.status === 401 || response.status === 419) {
       this.csrfInitialized = false;
     }
 

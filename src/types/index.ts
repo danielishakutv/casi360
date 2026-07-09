@@ -119,31 +119,6 @@ export interface FAQ {
   category: string;
 }
 
-export interface ModuleConfig {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  enabled: boolean;
-  routes: ModuleRoute[];
-  permissions: UserRole[];
-}
-
-export interface ModuleRoute {
-  path: string;
-  label: string;
-  icon?: string;
-}
-
-export interface SidebarItem {
-  title: string;
-  href: string;
-  icon: string;
-  children?: SidebarItem[];
-  badge?: number;
-  roles?: UserRole[];
-}
-
 export interface Designation {
   id: string;
   title: string;

@@ -9,20 +9,13 @@ import {
   UserCheck,
   Building2,
   CalendarOff,
-  CheckCircle,
   MessageSquare,
-  Inbox,
-  PenSquare,
-  Send,
-  FileText,
   Settings,
-  UserCircle,
   HelpCircle,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   LogOut,
-  Shield,
   Wallet,
   Award,
   StickyNote,
@@ -42,8 +35,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
 import { useSidebarStore } from "@/store/sidebar-store";
-import { useModuleStore } from "@/store/module-store";
-import { getEnabledModules, getModulesForRole } from "@/lib/module-registry";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -51,53 +42,104 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 
-const iconMap: Record<string, React.ElementType> = {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  Building2,
-  CalendarOff,
-  CheckCircle,
-  MessageSquare,
-  Inbox,
-  PenSquare,
-  Wallet,
-  Award,
-  StickyNote,
-  Send,
-  FileText,
-  Settings,
-  UserCircle,
-  Mail,
-  Smartphone,
-  Megaphone,
-  HelpCircle,
-  Shield,
-  ShoppingCart,
-  ClipboardList,
-  Store,
-  Package,
-  FileInput,
-  Target,
-  FolderKanban,
-  Heart,
-  BarChart3,
-};
+/* ─── Static Navigation ──────────────────────────────────────────── */
+
+interface NavChild {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  children?: NavChild[];
+}
+
+const navigation: NavItem[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    id: "hr",
+    label: "HR Management",
+    href: "/hr",
+    icon: Users,
+    children: [
+      { label: "Overview", href: "/hr", icon: Users },
+      { label: "Staff List", href: "/hr/staff-list", icon: UserCheck },
+      { label: "Departments", href: "/hr/departments", icon: Building2 },
+      { label: "Leave Requests", href: "/hr/leaves", icon: CalendarOff },
+      { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+      { label: "Designations", href: "/hr/designations", icon: Award },
+      { label: "Notes", href: "/hr/notes", icon: StickyNote },
+      { label: "Settings", href: "/hr/settings", icon: Settings },
+    ],
+  },
+  {
+    id: "communication",
+    label: "Communication",
+    href: "/communication",
+    icon: MessageSquare,
+    children: [
+      { label: "Overview", href: "/communication", icon: MessageSquare },
+      { label: "Send Email", href: "/communication/send-email", icon: Mail },
+      { label: "Send SMS", href: "/communication/send-sms", icon: Smartphone },
+      { label: "Send Notice", href: "/communication/send-notice", icon: Megaphone },
+    ],
+  },
+  {
+    id: "procurement",
+    label: "Procurement",
+    href: "/procurement",
+    icon: ShoppingCart,
+    children: [
+      { label: "Overview", href: "/procurement", icon: ShoppingCart },
+      { label: "Purchase Orders", href: "/procurement/purchase-orders", icon: ClipboardList },
+      { label: "Vendors", href: "/procurement/vendors", icon: Store },
+      { label: "Inventory", href: "/procurement/inventory", icon: Package },
+      { label: "Requisitions", href: "/procurement/requisitions", icon: FileInput },
+    ],
+  },
+  {
+    id: "programs",
+    label: "Programs",
+    href: "/programs",
+    icon: Target,
+    children: [
+      { label: "Overview", href: "/programs", icon: Target },
+      { label: "Projects", href: "/programs/projects", icon: FolderKanban },
+      { label: "Beneficiaries", href: "/programs/beneficiaries", icon: Heart },
+      { label: "Reports", href: "/programs/reports", icon: BarChart3 },
+    ],
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    href: "/settings",
+    icon: Settings,
+  },
+  {
+    id: "help",
+    label: "Help Center",
+    href: "/help",
+    icon: HelpCircle,
+  },
+];
+
+/* ─── Sidebar Component ──────────────────────────────────────────── */
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const { isCollapsed, toggleCollapsed } = useSidebarStore();
-  const { enabledModules } = useModuleStore();
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({});
-
-  const allModules = getEnabledModules(enabledModules);
-  const modules = (user
-    ? getModulesForRole(allModules, user.role)
-    : allModules
-  ).filter((m) => m.id !== "profile");
 
   const toggleSubMenu = (id: string) => {
     setOpenSubMenus((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -105,13 +147,13 @@ export function Sidebar() {
 
   // Auto-open submenus based on current path
   React.useEffect(() => {
-    modules.forEach((mod) => {
-      if (mod.routes.length > 1) {
-        const isActive = mod.routes.some(
-          (r) => pathname === r.path || pathname.startsWith(r.path + "/")
+    navigation.forEach((item) => {
+      if (item.children) {
+        const isActive = item.children.some(
+          (c) => pathname === c.href || pathname.startsWith(c.href + "/")
         );
         if (isActive) {
-          setOpenSubMenus((prev) => ({ ...prev, [mod.id]: true }));
+          setOpenSubMenus((prev) => ({ ...prev, [item.id]: true }));
         }
       }
     });
@@ -146,28 +188,26 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="flex flex-col gap-1">
-          {modules.map((mod) => {
-            const Icon = iconMap[mod.icon] || LayoutDashboard;
-            const hasChildren = mod.routes.length > 1;
-            const mainRoute = mod.routes[0];
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const hasChildren = !!item.children;
             const isActive =
-              pathname === mainRoute.path ||
-              pathname.startsWith(mainRoute.path + "/") ||
+              pathname === item.href ||
+              pathname.startsWith(item.href + "/") ||
               (hasChildren &&
-                mod.routes.some(
-                  (r) =>
-                    pathname === r.path || pathname.startsWith(r.path + "/")
+                item.children!.some(
+                  (c) => pathname === c.href || pathname.startsWith(c.href + "/")
                 ));
-            const isOpen = openSubMenus[mod.id];
+            const isOpen = openSubMenus[item.id];
 
             if (hasChildren) {
               return (
-                <div key={mod.id}>
+                <div key={item.id}>
                   {isCollapsed ? (
                     <Tooltip delayDuration={0}>
                       <TooltipTrigger asChild>
                         <Link
-                          href={mainRoute.path}
+                          href={item.href}
                           className={cn(
                             "flex h-10 w-full items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                             isActive && "bg-accent text-accent-foreground font-medium"
@@ -177,20 +217,20 @@ export function Sidebar() {
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="font-medium">
-                        {mod.name}
+                        {item.label}
                       </TooltipContent>
                     </Tooltip>
                   ) : (
                     <>
                       <button
-                        onClick={() => toggleSubMenu(mod.id)}
+                        onClick={() => toggleSubMenu(item.id)}
                         className={cn(
                           "flex h-10 w-full items-center gap-3 rounded-lg px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                           isActive && "bg-accent text-accent-foreground font-medium"
                         )}
                       >
                         <Icon className="h-5 w-5 shrink-0" />
-                        <span className="flex-1 text-left text-sm">{mod.name}</span>
+                        <span className="flex-1 text-left text-sm">{item.label}</span>
                         <ChevronDown
                           className={cn(
                             "h-4 w-4 transition-transform",
@@ -200,23 +240,21 @@ export function Sidebar() {
                       </button>
                       {isOpen && (
                         <div className="ml-4 mt-1 flex flex-col gap-1 border-l pl-3">
-                          {mod.routes.map((route) => {
-                            const SubIcon = route.icon
-                              ? iconMap[route.icon]
-                              : null;
-                            const isSubActive = pathname === route.path;
+                          {item.children!.map((child) => {
+                            const SubIcon = child.icon;
+                            const isSubActive = pathname === child.href;
                             return (
                               <Link
-                                key={route.path}
-                                href={route.path}
+                                key={child.href}
+                                href={child.href}
                                 className={cn(
                                   "flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                                   isSubActive &&
                                     "bg-accent text-accent-foreground font-medium"
                                 )}
                               >
-                                {SubIcon && <SubIcon className="h-4 w-4" />}
-                                <span>{route.label}</span>
+                                <SubIcon className="h-4 w-4" />
+                                <span>{child.label}</span>
                               </Link>
                             );
                           })}
@@ -229,10 +267,10 @@ export function Sidebar() {
             }
 
             return isCollapsed ? (
-              <Tooltip key={mod.id} delayDuration={0}>
+              <Tooltip key={item.id} delayDuration={0}>
                 <TooltipTrigger asChild>
                   <Link
-                    href={mainRoute.path}
+                    href={item.href}
                     className={cn(
                       "flex h-10 w-full items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                       isActive && "bg-accent text-accent-foreground font-medium"
@@ -242,20 +280,20 @@ export function Sidebar() {
                   </Link>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="font-medium">
-                  {mod.name}
+                  {item.label}
                 </TooltipContent>
               </Tooltip>
             ) : (
               <Link
-                key={mod.id}
-                href={mainRoute.path}
+                key={item.id}
+                href={item.href}
                 className={cn(
                   "flex h-10 items-center gap-3 rounded-lg px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
                   isActive && "bg-accent text-accent-foreground font-medium"
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" />
-                <span className="text-sm">{mod.name}</span>
+                <span className="text-sm">{item.label}</span>
               </Link>
             );
           })}
