@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Mail\NotificationMail;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -69,6 +71,44 @@ class User extends Authenticatable
             'email_notifications' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Email this user a password-reset link.
+     *
+     * Overridden because this backend is API-only. Laravel's stock
+     * ResetPassword notification builds its link from route('password.reset'),
+     * a web route that only exists in Breeze/Fortify-style apps — here it
+     * throws RouteNotFoundException. The link has to point at the SPA's
+     * /reset-password page, which reads `token` and `email` from the query
+     * string.
+     *
+     * Sent with Mail::to() rather than through Notifier on purpose: a reset
+     * link is a security email, so neither the org-wide "Email Alerts" switch
+     * nor the user's personal email_notifications preference may suppress it.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $url = rtrim((string) config('app.frontend_url'), '/')
+            . '/reset-password?token=' . urlencode($token)
+            . '&email=' . urlencode($this->getEmailForPasswordReset());
+
+        $broker  = config('auth.defaults.passwords', 'users');
+        $minutes = (int) config("auth.passwords.{$broker}.expire", 60);
+
+        Mail::to($this->email)->send(new NotificationMail(
+            subjectLine: 'Reset your CASI 360 password',
+            heading: 'Reset your password',
+            lines: [
+                'We received a request to reset the password for your CASI 360 account.',
+                "This link expires in {$minutes} minutes and can only be used once.",
+                "If you didn't request this, you can safely ignore this email — your password will not change.",
+            ],
+            actionText: 'Reset password',
+            actionUrl: $url,
+            greetingName: strtok(trim((string) $this->name), ' ') ?: null,
+            footnote: 'Sent because a password reset was requested for this email address on CASI 360.',
+        ));
     }
 
     /* ----------------------------------------------------------------

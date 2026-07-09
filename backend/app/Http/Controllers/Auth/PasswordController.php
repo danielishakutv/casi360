@@ -11,6 +11,7 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
@@ -60,9 +61,16 @@ class PasswordController extends Controller
      */
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        // A mail-transport failure must not surface to the caller: a 500 would
+        // break the flow and, because it only fires for addresses that resolve
+        // to a real user, would leak which emails have accounts.
+        try {
+            Password::sendResetLink($request->only('email'));
+        } catch (\Throwable $e) {
+            Log::error('Password reset link could not be sent: ' . $e->getMessage(), [
+                'email' => $request->email,
+            ]);
+        }
 
         // Always return success to prevent email enumeration
         AuditLog::record(
