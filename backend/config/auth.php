@@ -61,4 +61,17 @@ return [
     */
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Minimum Password Length
+    |--------------------------------------------------------------------------
+    |
+    | Read via App\Support\PasswordPolicy, which floors it at 8. Lives here
+    | rather than being read with env() at validation time so it survives
+    | `php artisan config:cache` — that command skips loading .env, and a
+    | bare env() call would then return null.
+    |
+    */
+    'password_min_length' => (int) env('PASSWORD_MIN_LENGTH', 8),
+
 ];

@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\PasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class RegisterUserRequest extends FormRequest
 {
@@ -21,11 +21,7 @@ class RegisterUserRequest extends FormRequest
             'password' => [
                 'required',
                 'string',
-                Password::min((int) env('PASSWORD_MIN_LENGTH', 8))
-                    ->mixedCase()
-                    ->numbers()
-                    ->symbols()
-                    ->uncompromised(),
+                PasswordPolicy::rule(),
             ],
             // nullable: the frontend always sends these keys, and Laravel's
             // ConvertEmptyStringsToNull middleware turns empty inputs into null.
@@ -41,7 +37,7 @@ class RegisterUserRequest extends FormRequest
     {
         return [
             'email.unique' => 'A user with this email already exists.',
-            'password.min' => 'Password must be at least ' . env('PASSWORD_MIN_LENGTH', 8) . ' characters.',
+            'password.min' => 'Password must be at least ' . PasswordPolicy::minLength() . ' characters.',
         ];
     }
 }

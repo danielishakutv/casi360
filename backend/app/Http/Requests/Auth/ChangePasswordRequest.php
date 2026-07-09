@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\PasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class ChangePasswordRequest extends FormRequest
 {
@@ -19,11 +19,7 @@ class ChangePasswordRequest extends FormRequest
             'new_password' => [
                 'required',
                 'string',
-                Password::min((int) env('PASSWORD_MIN_LENGTH', 8))
-                    ->mixedCase()
-                    ->numbers()
-                    ->symbols()
-                    ->uncompromised(),
+                PasswordPolicy::rule(),
                 'different:current_password',
             ],
             'new_password_confirmation' => ['required', 'same:new_password'],
