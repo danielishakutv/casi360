@@ -6,8 +6,3 @@ cp -rf /home/api.casi360.com/_deploy_tmp/backend/database/* /home/api.casi360.co
 cp -rf /home/api.casi360.com/_deploy_tmp/backend/routes/* /home/api.casi360.com/routes/
 php artisan migrate
 php artisan optimize:clear
-
-
-
-
-
