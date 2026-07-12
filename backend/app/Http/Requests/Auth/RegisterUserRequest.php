@@ -27,7 +27,7 @@ class RegisterUserRequest extends FormRequest
             // ConvertEmptyStringsToNull middleware turns empty inputs into null.
             // Without nullable, an empty phone/department/role would fail the
             // string rule and return a 422. These fields are optional by design.
-            'role' => ['sometimes', 'nullable', 'string', 'in:super_admin,admin,manager,staff'],
+            'role' => ['sometimes', 'nullable', 'string', 'in:super_admin,admin,country_director,manager,staff'],
             'department' => ['sometimes', 'nullable', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
         ];
